@@ -58,6 +58,7 @@ All feel/score numbers live in `src/tuning.ts`.
 | `src/tricks/Combo.ts` | the current line: accumulate, link multiplier, bank on clean ride-away, lose on bail |
 | `src/tricks/Run.ts` | timed run, category totals, personal best per park (localStorage) |
 | `src/replay/Replay.ts` | 30 Hz recorder of rig snapshots + player with follow / orbit / fixed-tripod cameras |
+| `src/gfx/Graphics.ts` | Low / Medium / High: physical materials (from Lambert + per-material hints), sun shadows following the rider, post (bloom, grade, vignette, MSAA) |
 | `src/net/` | multiplayer client: `Net` (socket, roster, clock sync), `Ghosts` (interpolated remote riders), `protocol` (35-number pose packing) |
 | `server/index.mjs` | multiplayer server: rooms, state relay, 1v1 duels, validation + rate limits |
 | `src/ui/Touch.ts` | on-screen stick + trick buttons (auto on touch devices, or add `?touch=1`) |

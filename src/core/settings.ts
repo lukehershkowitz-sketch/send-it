@@ -13,6 +13,7 @@ export interface Settings {
   playerName: string;
   mpCode: string;      // room code ('' = public)
   mpServer: string;    // '' = default (VITE_MP_URL or this site's /ws)
+  graphics: 'auto' | 'low' | 'medium' | 'high';
 }
 
 export interface RiderColors { frame: string; jersey: string; pants: string; helmet: string }
@@ -28,7 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volume: 0.8, muted: false, landingAssist: TUNING.air.autoLevel, renderScale: 1, showDebug: false,
   park: 'dirtline', lighting: 'day',
   colors: { frame: '#ff5a1f', jersey: '#1fb5a6', pants: '#2b2f3a', helmet: '#f4f4f4' },
-  playerName: '', mpCode: '', mpServer: '',
+  playerName: '', mpCode: '', mpServer: '', graphics: 'auto',
 };
 
 export function loadSettings(): Settings {

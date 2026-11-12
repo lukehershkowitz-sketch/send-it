@@ -1,7 +1,8 @@
 import {
   AdditiveBlending, Box3, BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight, Fog, Group,
   HemisphereLight, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry,
-  PointLight, Quaternion, Scene, SphereGeometry, Sprite, SpriteMaterial, Vector3, type Material, type WebGLRenderer,
+  BackSide, PMREMGenerator, PointLight, Quaternion, Scene, ShaderMaterial, SphereGeometry, Sprite, SpriteMaterial, Vector3,
+  type Material, type WebGLRenderer,
 } from 'three';
 import { TUNING } from '../tuning';
 import type { World } from './World';
@@ -11,12 +12,50 @@ import { rng, textures } from './textures';
 export type Lighting = 'day' | 'night';
 
 const PRESETS = {
-  day: { sky: 0xa9d4ee, hemiSky: 0xdff1ff, hemiGround: 0x5d4a35, hemi: 1.5, sun: 0xfff0d6, sunI: 2.2, fogNear: TUNING.render.fogNear, fogFar: TUNING.render.fogFar },
-  night: { sky: 0x0b1326, hemiSky: 0x4a5a8a, hemiGround: 0x1a1612, hemi: 0.35, sun: 0x9fb4ff, sunI: 0.35, fogNear: 18, fogFar: 120 },
+  day: {
+    sky: 0xa6d0ef, skyTop: 0x2f7fd8, skyGround: 0x6f7a55, hemiSky: 0xdff1ff, hemiGround: 0x5d4a35, hemi: 1.5,
+    sun: 0xfff0d6, sunI: 2.4, sunGlow: 0xfff3d6, fogNear: TUNING.render.fogNear, fogFar: TUNING.render.fogFar, stars: 0,
+  },
+  night: {
+    sky: 0x17223d, skyTop: 0x03060f, skyGround: 0x0c0f14, hemiSky: 0x4a5a8a, hemiGround: 0x1a1612, hemi: 0.35,
+    sun: 0x9fb4ff, sunI: 0.4, sunGlow: 0x8fa8ff, fogNear: 18, fogFar: 120, stars: 1,
+  },
 };
+
+/** Gradient sky + sun/moon glow (+ stars at night), drawn on a big inside-out sphere. */
+function skyMaterial(L: { sky: number; skyTop: number; skyGround: number; sunGlow: number; stars: number }) {
+  return new ShaderMaterial({
+    side: BackSide, depthWrite: false, fog: false, toneMapped: false,
+    uniforms: {
+      top: { value: new Color(L.skyTop) }, horizon: { value: new Color(L.sky) }, ground: { value: new Color(L.skyGround) },
+      sunDir: { value: new Vector3(-30, 60, -20).normalize() }, // same direction the sun light comes from
+      glow: { value: new Color(L.sunGlow) }, stars: { value: L.stars },
+    },
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; }',
+    fragmentShader: `
+      uniform vec3 top; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunDir; uniform vec3 glow; uniform float stars;
+      varying vec3 vDir;
+      float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+      void main() {
+        vec3 d = normalize(vDir);
+        float h = d.y;
+        vec3 c = h > 0.0 ? mix(horizon, top, pow(smoothstep(0.0, 0.75, h), 0.8)) : mix(horizon, ground, smoothstep(0.0, 0.15, -h));
+        float s = max(dot(d, normalize(sunDir)), 0.0);
+        c += glow * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.25);
+        if (stars > 0.5 && h > 0.05) {
+          float st = step(0.9975, hash(floor(d * 260.0)));
+          c += vec3(st) * 0.9 * smoothstep(0.05, 0.4, h);
+        }
+        gl_FragColor = vec4(c, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+}
 
 export interface Decor {
   group: Group;
+  sun: DirectionalLight;
+  hemi: HemisphereLight;
   /** Per frame: move the real lights to the lamps nearest the rider (night). */
   update(riderPos: Vector3): void;
   dispose(): void;
@@ -25,32 +64,51 @@ export interface Decor {
 /** Browser-only dressing: sky, fog, lights, textures, trees, rocks, dirt track, night lamps. */
 export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, lighting: Lighting): Decor {
   const L = PRESETS[lighting];
+  const night = lighting === 'night';
   const D = world.def.decor ?? {};
   const theme = D.theme ?? 'meadow';
   const group = new Group();
   const disposables: { dispose(): void }[] = [];
   const keep = <T extends { dispose(): void }>(x: T) => { disposables.push(x); return x; };
   const aniso = renderer.capabilities.getMaxAnisotropy();
-  const night = lighting === 'night';
 
   scene.background = new Color(L.sky);
   scene.fog = new Fog(L.sky, L.fogNear, L.fogFar);
-  group.add(new HemisphereLight(L.hemiSky, L.hemiGround, L.hemi));
+  const hemi = new HemisphereLight(L.hemiSky, L.hemiGround, L.hemi);
+  hemi.userData.base = L.hemi;
+  group.add(hemi);
   const sun = new DirectionalLight(L.sun, L.sunI);
   sun.position.set(-30, 60, -20);
   group.add(sun);
 
+  // sky dome, and the same sky baked into an environment map for physical materials
+  const skyMat = keep(skyMaterial(L));
+  const skyGeo = keep(new SphereGeometry(450, 32, 16));
+  const sky = new Mesh(skyGeo, skyMat);
+  sky.renderOrder = -10;
+  sky.frustumCulled = false;
+  sky.userData.noCast = sky.userData.noReceive = true;
+  group.add(sky);
+  const envScene = new Scene();
+  envScene.add(new Mesh(skyGeo, skyMat));
+  const pmrem = new PMREMGenerator(renderer);
+  const env = keep(pmrem.fromScene(envScene, 0.04).texture);
+  pmrem.dispose();
+  scene.environment = env;
+  scene.environmentIntensity = night ? 0.5 : 0.75;
+
   // ---------------------------------------------------------------- materials for park pieces
   const groundTex = keep(theme === 'forest' ? textures.forestFloor(aniso) : theme === 'urban' ? textures.concrete(aniso) : textures.grass(aniso));
   const concreteTex = keep(textures.concrete(aniso)), woodTex = keep(textures.wood(aniso));
+  const hint = <T extends Material>(m: T, roughness: number, metalness = 0): T => { m.userData.pbr = { roughness, metalness }; return m; };
   const swap: Map<Material, Material> = new Map([
-    [pieceMaterials.ground, keep(new MeshLambertMaterial({ map: groundTex }))],
-    [pieceMaterials.dirtTop, keep(new MeshLambertMaterial({ map: keep(textures.dirtTop(aniso)), flatShading: true }))],
-    [pieceMaterials.dirtSide, keep(new MeshLambertMaterial({ map: keep(textures.dirtSide(aniso)), flatShading: true, side: 2 }))],
-    [pieceMaterials.concrete, keep(new MeshLambertMaterial({ map: concreteTex }))],
-    [pieceMaterials.concreteSide, keep(new MeshLambertMaterial({ map: concreteTex, color: 0xd8d4cc, side: 2 }))],
-    [pieceMaterials.wood, keep(new MeshLambertMaterial({ map: woodTex }))],
-    [pieceMaterials.woodSide, keep(new MeshLambertMaterial({ color: 0x7c5a36, side: 2 }))],
+    [pieceMaterials.ground, keep(hint(new MeshLambertMaterial({ map: groundTex }), 1))],
+    [pieceMaterials.dirtTop, keep(hint(new MeshLambertMaterial({ map: keep(textures.dirtTop(aniso)), flatShading: true }), 1))],
+    [pieceMaterials.dirtSide, keep(hint(new MeshLambertMaterial({ map: keep(textures.dirtSide(aniso)), flatShading: true, side: 2 }), 1))],
+    [pieceMaterials.concrete, keep(hint(new MeshLambertMaterial({ map: concreteTex }), 0.88))],
+    [pieceMaterials.concreteSide, keep(hint(new MeshLambertMaterial({ map: concreteTex, color: 0xd8d4cc, side: 2 }), 0.9))],
+    [pieceMaterials.wood, keep(hint(new MeshLambertMaterial({ map: woodTex }), 0.62))],
+    [pieceMaterials.woodSide, keep(hint(new MeshLambertMaterial({ color: 0x7c5a36, side: 2 }), 0.8))],
   ]);
   world.root.traverse((o) => {
     const m = o as Mesh;
@@ -62,7 +120,9 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
   if ((D.pathWidth ?? 0) > 0 && path.length > 1) {
     const mat = keep(new MeshLambertMaterial({ map: keep(textures.dirtTop(aniso)), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     const geo = keep(ribbon(path, D.pathWidth!, 0.02));
-    group.add(new Mesh(geo, mat));
+    const track = new Mesh(geo, mat);
+    track.userData.noCast = true;
+    group.add(track);
   }
 
   // ---------------------------------------------------------------- trees + rocks
@@ -80,7 +140,8 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
     spots.push(p);
   }
   const forest = theme === 'forest';
-  const crown = new InstancedMesh(keep(new ConeGeometry(1, 1, 6)), keep(new MeshLambertMaterial({ color: 0xffffff, flatShading: true })), spots.length);
+  const crownMat = keep(hint(new MeshLambertMaterial({ color: 0xffffff, flatShading: true }), 0.95));
+  const crown = new InstancedMesh(keep(new ConeGeometry(1, 1, 6)), crownMat, spots.length);
   const trunk = new InstancedMesh(keep(new CylinderGeometry(0.18, 0.25, 1, 5)), keep(new MeshLambertMaterial({ color: 0x5b4030 })), spots.length);
   const m = new Matrix4(), q = new Quaternion(), s = new Vector3(), p = new Vector3(), col = new Color();
   spots.forEach((v, i) => {
@@ -91,6 +152,7 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
     trunk.setMatrixAt(i, m);
     crown.setColorAt(i, col.setHSL(0.3 + rand() * 0.08, forest ? 0.42 : 0.38, (forest ? 0.2 : 0.27) + rand() * 0.1));
   });
+  crown.userData.tree = trunk.userData.tree = true;
   group.add(crown, trunk);
 
   const nRocks = D.rocks ?? 60;
@@ -131,7 +193,7 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
   if (night) {
     const spacing = D.lamps ?? 25;
     const poleMat = keep(new MeshLambertMaterial({ color: 0x30343a }));
-    const bulbMat = keep(new MeshBasicMaterial({ color: 0xffe2a8 }));
+    const bulbMat = keep(new MeshBasicMaterial({ color: new Color(0xffe2a8).multiplyScalar(4) })); // HDR → blooms on High
     const glowTex = keep(textures.radial());
     const poolMat = keep(new MeshBasicMaterial({ map: glowTex, color: 0xffb860, transparent: true, opacity: 0.35, depthWrite: false, blending: AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4 }));
     const haloMat = keep(new SpriteMaterial({ map: glowTex, color: 0xffd28a, transparent: true, opacity: 0.8, depthWrite: false, blending: AdditiveBlending }));
@@ -147,6 +209,7 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
       const bulb = new Mesh(bulbGeo, bulbMat); bulb.position.copy(base).setY(5.5);
       const halo = new Sprite(haloMat); halo.position.copy(bulb.position); halo.scale.set(2.2, 2.2, 1);
       const pl = new Mesh(poolGeo, poolMat); pl.position.copy(base).setY(0.03);
+      bulb.userData.noCast = pl.userData.noCast = pl.userData.noReceive = true;
       group.add(pole, bulb, halo, pl);
       lampPos.push(bulb.position.clone());
     }
@@ -155,7 +218,7 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
       pool.push(l);
       group.add(l);
     }
-    riderLight = new PointLight(0xdfe8ff, 9, 16, 1.4);
+    riderLight = new PointLight(0xdfe8ff, 14, 22, 1.4);
     group.add(riderLight);
   }
 
@@ -163,6 +226,8 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
   const order: number[] = lampPos.map((_, i) => i);
   return {
     group,
+    sun,
+    hemi,
     update(riderPos: Vector3) {
       if (!night) return;
       order.sort((a, b) => lampPos[a].distanceToSquared(riderPos) - lampPos[b].distanceToSquared(riderPos));
@@ -172,10 +237,12 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
         l.position.copy(lampPos[idx]);
         l.intensity = 60;
       });
-      riderLight!.position.set(riderPos.x, riderPos.y + 3, riderPos.z);
+      riderLight!.position.set(riderPos.x, riderPos.y + 5, riderPos.z);
     },
     dispose() {
       scene.remove(group);
+      scene.remove(sun.target);
+      scene.environment = null;
       disposables.forEach((d) => d.dispose());
     },
   };

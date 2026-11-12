@@ -29,6 +29,8 @@ class Ghost {
 /** Other riders in the room, drawn ~150 ms in the past and interpolated between server updates. */
 export class Ghosts {
   private ghosts = new Map<number, Ghost>();
+  /** Draw blob shadows (when real shadows are off). */
+  blobShadows = true;
   constructor(private scene: Scene) {}
 
   get count() { return this.ghosts.size; }
@@ -60,7 +62,8 @@ export class Ghosts {
     for (const g of this.ghosts.values()) {
       const b = g.buf;
       const visible = b.length > 0 && renderT - b[b.length - 1].t < 3000;
-      g.rig.root.visible = g.label.visible = g.rig.shadow.visible = visible;
+      g.rig.root.visible = g.label.visible = visible;
+      g.rig.shadow.visible = visible && this.blobShadows;
       g.rig.bikeBody.visible = g.rig.riderBody.visible = visible;
       if (!visible) continue;
       // find the pair around renderT (hold the newest if we've run past it)
@@ -73,7 +76,7 @@ export class Ghosts {
       const head = s.bailed ? s.riderPos : s.pos;
       g.label.position.set(head.x, head.y + (s.bailed ? 1.1 : 2.15), head.z);
       const ground = world.groundBelow(s.bailed ? s.bikePos : s.pos);
-      g.rig.shadow.visible = !!ground;
+      g.rig.shadow.visible = !!ground && this.blobShadows;
       if (ground) {
         g.rig.shadow.position.copy(ground.point).addScaledVector(ground.normal, 0.02);
         g.rig.shadow.quaternion.setFromUnitVectors(g.rig.shadow.up, ground.normal);

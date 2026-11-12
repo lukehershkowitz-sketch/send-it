@@ -131,6 +131,12 @@ export class RiderRig {
       shoe: L(0xe8e8e8), visor: L(0x222222), grip: L(0x111111), glove: L(0x2b2b30), sole: L(0x1a1a1a),
       accent: L(0xffd23f), goggle: L(0xff8a3d), sidewall: L(0x6b4a2a), chain: L(0x55595e),
     };
+    const pbr: Record<string, [number, number]> = {
+      frame: [0.36, 0.35], chrome: [0.22, 0.95], tire: [0.95, 0], rim: [0.3, 0.85], dark: [0.55, 0.4], helmet: [0.32, 0],
+      goggle: [0.15, 0.2], visor: [0.2, 0.1], chain: [0.45, 0.8], accent: [0.4, 0.1], sidewall: [0.9, 0], grip: [0.9, 0],
+      shirt: [0.92, 0], pants: [0.95, 0], skin: [0.7, 0], shoe: [0.8, 0], glove: [0.85, 0], sole: [0.9, 0],
+    };
+    for (const [k, [r, mt]] of Object.entries(pbr)) if (this.mats[k]) this.mats[k].userData.pbr = { roughness: r, metalness: mt };
     this.root.add(this.bikeBody, this.riderBody);
     this.bikeBody.position.set(0, 0.45, 0);
     this.bikeBody.add(this.bike);
@@ -146,6 +152,7 @@ export class RiderRig {
       new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }),
     );
     this.shadow.scale.set(0.55, 1, 1.15);
+    this.shadow.userData.blob = true;
     this.shadow.renderOrder = 1;
 
     this.root.traverse((o) => { o.castShadow = false; o.receiveShadow = false; });

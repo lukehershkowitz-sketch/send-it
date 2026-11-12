@@ -25,6 +25,7 @@ import { Menu } from './ui/Menu';
 import { ComboTracker } from './tricks/Combo';
 import { Run } from './tricks/Run';
 import { Particles } from './fx/Particles';
+import { Graphics, defaultQuality, type Quality } from './gfx/Graphics';
 import { Sfx } from './audio/Sfx';
 
 // --------------------------------------------------------------------------- setup
@@ -41,6 +42,8 @@ let lighting: Lighting = settings.lighting;
 let world = new World(park.def);
 scene.add(world.root);
 let decor: Decor = decorate(scene, world, renderer, lighting);
+const graphics = new Graphics(renderer, scene, camera);
+const qualityFor = (s: Settings): Quality => (s.graphics === 'auto' ? defaultQuality(isTouchDevice()) : s.graphics);
 
 const events = new Emitter<RiderEvents>();
 const rider = new RiderController(world, events);
@@ -75,6 +78,9 @@ const replay = new ReplayPlayer(camera, chase);
 let replayFrom: 'pause' | 'summary' = 'pause';
 let lastSummary: RunSummary | null = null;
 const touch = isTouchDevice() ? new TouchControls(document.body) : null;
+graphics.setSun(decor.sun, lighting === 'night');
+graphics.setQuality(qualityFor(settings));
+applyHemi();
 const net = new Net();
 const ghosts = new Ghosts(scene);
 const sendSnap = makeSnapshot();
@@ -97,7 +103,7 @@ const menu = new Menu(document.getElementById('menu')!, settings, input.bindings
   bindingsChanged: (b) => { input.bindings = b; saveBindings(b); },
   sound: () => { sfx.unlock(); sfx.ui(); },
   replay: () => startReplay('pause'),
-  colorsChanged: () => { rig.setColors(settings.colors); if (net.online) net.hello(playerName(), settings.colors); },
+  colorsChanged: () => { rig.setColors(settings.colors); graphics.refresh(rig.root); if (net.online) net.hello(playerName(), settings.colors); },
   mpJoin: () => void mpJoin(),
   mpLeave: () => { net.leave(); net.disconnect(); ghosts.clear(); duel = null; menu.refresh(); hud.duelBanner(null); hud.roster(null); },
   mpChallenge: () => { net.duelRequest(); },
@@ -142,11 +148,13 @@ net.events.on('message', (m) => {
     case 'welcome':
       ghosts.clear();
       ghosts.sync(net.players);
+      graphics.refresh(scene);
       hud.feed(`Joined ${park.name} · room ${m.code}${m.players.length ? ` · ${m.players.length} other rider${m.players.length > 1 ? 's' : ''}` : ''}`, 'sys');
       duel = m.duel ? { ...m.duel, me: false, started: true } : null;
       break;
     case 'join':
       ghosts.sync(net.players);
+      graphics.refresh(scene);
       hud.feed(`${m.player.name} joined`, 'sys');
       break;
     case 'leave':
@@ -276,8 +284,14 @@ function replayControls(realDt: number) {
 function openPause() { loop.paused = true; menu.syncPad(); menu.show('pause'); }
 function closeMenu() { menu.hide(); loop.paused = summaryOpen; input.flush(); }
 
+/** Physical materials also get light from the sky environment, so the hemisphere fill is lowered. */
+function applyHemi() {
+  decor.hemi.intensity = (decor.hemi.userData.base as number) * (graphics.preset.pbr ? 0.45 : 1);
+}
+
 function applySettings(s: Settings) {
   saveSettings(s);
+  if (qualityFor(s) !== graphics.quality) { graphics.setQuality(qualityFor(s)); applyHemi(); }
   applyTuningSettings(s);
   sfx.setVolume(s.volume);
   sfx.setMuted(s.muted);
@@ -297,6 +311,9 @@ function loadPark(id: string, light: Lighting) {
   world = new World(park.def);
   scene.add(world.root);
   decor = decorate(scene, world, renderer, lighting);
+  graphics.setSun(decor.sun, lighting === 'night');
+  graphics.refresh(scene);
+  applyHemi();
   rider.setWorld(world);
   chase.world = world;
   particles.setNight(lighting === 'night');
@@ -429,7 +446,8 @@ const loop = new GameLoop(
         <div class="prog"><div style="width:${(replay.time / Math.max(0.01, replay.duration)) * 100}%"></div></div>`;
       decor.update(rig.root.position);
       sfx.update(realDt, rider, true);
-      renderer.render(scene, camera);
+      graphics.follow(rig.riderBody.parent === rig.root ? rig.root.position : rig.riderBody.position);
+      graphics.render();
       return;
     }
     const simDt = loop.paused ? 0 : realDt * loop.timeScale;
@@ -443,6 +461,7 @@ const loop = new GameLoop(
     if (menu.open && menu.screen === 'rider') orbitPreview(realDt);
     else chase.update(loop.paused ? 0 : realDt, camTarget, input.look);
     decor.update(rig.root.position);
+    ghosts.blobShadows = graphics.preset.shadows === 0;
     ghosts.update(net.serverNow() - 150, world);
     effects(simDt);
     particles.update(simDt);
@@ -461,7 +480,8 @@ const loop = new GameLoop(
       personalBest: run.personalBest,
     });
     debug.update(realDt, rider);
-    renderer.render(scene, camera);
+    graphics.follow(rider.state === 'BAILED' ? rig.riderBody.position : rig.root.position);
+    graphics.render();
   },
 );
 
@@ -511,6 +531,7 @@ function snapCamera() {
 }
 
 function updateShadow() {
+  if (graphics.preset.shadows > 0) { rig.shadow.visible = false; return; }
   const src = rider.state === 'BAILED' ? rig.bikeBody.position : rig.root.position;
   const g = world.groundBelow(src);
   rig.shadow.visible = !!g;
@@ -526,8 +547,7 @@ function updateShadow() {
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
-  renderer.setPixelRatio(Math.min(devicePixelRatio, TUNING.render.maxPixelRatio) * settings.renderScale);
-  renderer.setSize(w, h, false);
+  graphics.resize(w, h, settings.renderScale);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   particles.setViewportHeight(h);
@@ -541,6 +561,6 @@ loop.start();
 
 // handy in the console while tuning: window.sendit.rider, .tuning …
 (window as unknown as { sendit: unknown }).sendit = {
-  rider, tuning: TUNING, loop, combo, chase, menu, sfx, recorder, replay, startReplay, exitReplay, net, ghosts,
+  rider, tuning: TUNING, loop, combo, chase, menu, sfx, recorder, replay, startReplay, exitReplay, net, ghosts, graphics, settings, applySettings,
   get world() { return world; }, get run() { return run; }, loadPark, newRun, closeMenu,
 };

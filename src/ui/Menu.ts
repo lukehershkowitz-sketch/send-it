@@ -152,7 +152,8 @@ export class Menu {
           <label class="row" data-nav-wrap>Volume <input data-nav type="range" min="0" max="1" step="0.05" data-set="volume" value="${s.volume}"></label>
           <button data-nav data-act="toggle" data-set="muted" class="toggle">Sound: <b>${s.muted ? 'Off' : 'On'}</b></button>
           <label class="row">Landing assist <input data-nav type="range" min="0" max="1" step="0.1" data-set="landingAssist" value="${s.landingAssist}"></label>
-          <label class="row">Render quality <input data-nav type="range" min="0.5" max="1" step="0.25" data-set="renderScale" value="${s.renderScale}"></label>
+          <button data-nav data-act="gfx" class="toggle">Graphics: <b>${{ auto: 'Auto', low: 'Low', medium: 'Medium', high: 'High' }[s.graphics]}</b> <span class="hint">← →</span></button>
+          <label class="row">Resolution <input data-nav type="range" min="0.5" max="1" step="0.25" data-set="renderScale" value="${s.renderScale}"></label>
           <button data-nav data-act="toggle" data-set="showDebug" class="toggle">Debug overlay: <b>${s.showDebug ? 'On' : 'Off'}</b></button>
           ${btn('remap', 'Remap controls')}${btn('back', 'Back')}`;
         break;
@@ -242,7 +243,13 @@ export class Menu {
       this.h.colorsChanged();
       this.h.sound();
       this.rerenderKeepFocus();
-    } else if (el.dataset.act === 'lighting' || el.dataset.act === 'toggle') this.act(el);
+    } else if (el.dataset.act === 'gfx' && d < 0) {
+      const order = ['auto', 'low', 'medium', 'high'] as const;
+      this.settings.graphics = order[(order.indexOf(this.settings.graphics) + order.length - 1) % order.length];
+      this.h.settingsChanged(this.settings);
+      this.h.sound();
+      this.rerenderKeepFocus();
+    } else if (el.dataset.act === 'lighting' || el.dataset.act === 'toggle' || el.dataset.act === 'gfx') this.act(el);
   }
 
   // ------------------------------------------------------------------ actions
@@ -280,6 +287,13 @@ export class Menu {
         this.h.settingsChanged(this.settings);
         this.h.ride(el.dataset.park!, this.lighting);
         break;
+      case 'gfx': {
+        const order = ['auto', 'low', 'medium', 'high'] as const;
+        this.settings.graphics = order[(order.indexOf(this.settings.graphics) + 1) % order.length];
+        this.h.settingsChanged(this.settings);
+        this.rerenderKeepFocus();
+        break;
+      }
       case 'lighting':
         this.lighting = this.lighting === 'day' ? 'night' : 'day';
         this.rerenderKeepFocus();

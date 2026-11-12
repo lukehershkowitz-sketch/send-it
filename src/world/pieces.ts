@@ -50,6 +50,7 @@ const mats = {
   woodSide: new MeshLambertMaterial({ color: 0x7c5a36, side: DoubleSide }),
   coping: new MeshLambertMaterial({ color: 0x8d949a }),
 };
+for (const [m, r, mt] of [[mats.metal, 0.32, 0.85], [mats.coping, 0.4, 0.8], [mats.post, 0.55, 0.6]] as const) m.userData.pbr = { roughness: r, metalness: mt };
 /** Decor code swaps in a textured ground material in the browser. */
 export const pieceMaterials: Record<string, Material> = mats;
 

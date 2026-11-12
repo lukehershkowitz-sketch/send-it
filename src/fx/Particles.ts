@@ -46,6 +46,7 @@ export class Particles {
           float a = texture2D(map, gl_PointCoord).a * vA;
           if (a < 0.01) discard;
           gl_FragColor = vec4(vC, a);
+          #include <colorspace_fragment>
         }`,
       transparent: true,
       depthWrite: false,

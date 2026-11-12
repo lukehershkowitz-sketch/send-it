@@ -100,6 +100,7 @@ export class World {
       }
       for (const part of built.parts) {
         part.mesh.userData.pieceType = p.type;
+        if (p.type === 'ground') part.mesh.userData.noCast = true;
         part.mesh.geometry.applyMatrix4(m);
         part.mesh.geometry.computeBoundingSphere();
         part.mesh.geometry.computeBoundingBox();
