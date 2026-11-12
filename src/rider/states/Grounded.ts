@@ -127,6 +127,12 @@ export function rideStep(r: RiderController, dt: number, input: InputState, mode
     }
     const change = hit.normal.angleTo(r.normal);
     if (change > P.maxSlopeChangeDeg * DEG || hit.normal.y < P.minGroundNormalY) {
+      if (hit.normal.dot(tDir) > -0.2 && hit.point.y < r.pos.y) {
+        // the ground falls away beside/ahead of us (edge of a mound): roll off it
+        r.pos.copy(_np);
+        r.takeoff(false);
+        return false;
+      }
       if (r.speed > P.wallCrashSpeed) { r.bail('Hit a wall'); return false; }
       r.speed = 0;
     } else {

@@ -103,3 +103,40 @@ export function profileSides(runs: P2[][], width: number): BufferGeometry {
 }
 
 export const v3 = (x: number, y: number, z: number) => new Vector3(x, y, z);
+
+/**
+ * Sloped side walls for dirt mounds: the top edge follows the profile at ±width/2, the
+ * bottom edge flares out by `flare` × height, so mounds look piled up rather than cut.
+ */
+export function flaredSides(runs: P2[][], width: number, flare: number): BufferGeometry {
+  const pts: P2[] = [];
+  for (const run of runs) for (const p of run) {
+    const last = pts[pts.length - 1];
+    if (!last || Math.abs(last[0] - p[0]) > 1e-4 || Math.abs(last[1] - p[1]) > 1e-4) pts.push(p);
+  }
+  const pos: number[] = [];
+  const hw = width / 2;
+  for (const side of [1, -1]) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [z0, y0] = pts[i], [z1, y1] = pts[i + 1];
+      const t0 = [side * hw, y0, z0], t1 = [side * hw, y1, z1];
+      const b0 = [side * (hw + y0 * flare), 0, z0], b1 = [side * (hw + y1 * flare), 0, z1];
+      // two triangles, wound so the normal faces outward (±X)
+      const tri = side === 1 ? [t0, t1, b0, t1, b1, b0] : [t0, b0, t1, t1, b0, b1];
+      for (const v of tri) pos.push(...v);
+    }
+    // end caps where the profile meets the ground away from the first/last point
+    for (const [z, y] of [pts[0], pts[pts.length - 1]]) {
+      if (y < 1e-3) continue;
+      const a = [side * hw, y, z], b = [side * (hw + y * flare), 0, z], c = [side * hw, 0, z];
+      pos.push(...(side === 1 ? [...a, ...c, ...b] : [...a, ...b, ...c]));
+    }
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  const uv: number[] = [];
+  for (let i = 0; i < pos.length; i += 3) uv.push(pos[i + 2] * 0.5, pos[i + 1] * 0.5 + Math.abs(pos[i]) * 0.25);
+  g.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2));
+  g.computeVertexNormals();
+  return g;
+}

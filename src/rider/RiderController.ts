@@ -132,7 +132,11 @@ export class RiderController {
   debrisRider: DebrisBody = makeBody(0.45);
   input: InputState = emptyInput();
 
-  constructor(readonly world: World, readonly events: Emitter<RiderEvents>) {
+  /** Index of the last checkpoint rolled past (-1 = park spawn). */
+  checkpoint = -1;
+  private finished = false;
+
+  constructor(public world: World, readonly events: Emitter<RiderEvents>) {
     this.respawn();
   }
 
@@ -166,15 +170,48 @@ export class RiderController {
     this.visComp = clamp(this.visComp + this.visCompVel * dt, -0.2, 1);
 
     if (this.state !== 'BAILED' && this.pos.y < TUNING.physics.killY) this.respawn();
+    if (this.state !== 'BAILED') this.trackProgress();
+  }
+
+  /** Checkpoints + finish line. */
+  private trackProgress() {
+    const cps = this.world.checkpoints;
+    for (let i = this.checkpoint + 1; i < cps.length; i++) {
+      const c = cps[i].pos;
+      if (Math.hypot(c.x - this.pos.x, c.z - this.pos.z) < 6) {
+        this.checkpoint = i;
+        this.events.emit('checkpoint', { index: i });
+      }
+    }
+    const f = this.world.finish;
+    if (f && !this.finished && Math.hypot(f.pos.x - this.pos.x, f.pos.z - this.pos.z) < f.radius) {
+      this.finished = true;
+      this.events.emit('finish', {});
+    }
+  }
+
+  /** Swap parks (keeps listeners). */
+  setWorld(world: World) {
+    this.world = world;
+    this.checkpoint = -1;
+    this.respawn();
+  }
+
+  /** Back to the very start of the park (new run / finished the line). */
+  respawnAtStart() {
+    this.checkpoint = -1;
+    this.respawn();
   }
 
   respawn(): void {
     const w = this.world;
-    this.pos.copy(w.spawnPos);
+    const cp = this.checkpoint >= 0 ? w.checkpoints[this.checkpoint] : null;
+    this.pos.copy(cp ? cp.pos : w.spawnPos);
+    this.finished = false;
     const g = w.groundBelow(this.pos);
     if (g) { this.pos.copy(g.point); this.normal.copy(g.normal); } else this.normal.set(0, 1, 0);
-    this.heading = this.travelYaw = w.spawnYaw;
-    this.speed = 0;
+    this.heading = this.travelYaw = cp ? cp.yaw : w.spawnYaw;
+    this.speed = cp ? cp.speed : 0;
     this.vel.set(0, 0, 0);
     this.fakie = false;
     this.fakieVis = 0;
@@ -197,7 +234,7 @@ export class RiderController {
     Grounded.orient(this, 0);
     this.prevPos.copy(this.pos);
     this.prevQuat.copy(this.quat);
-    this.events.emit('respawn', {});
+    this.events.emit('respawn', { checkpoint: this.checkpoint });
   }
 
   // ------------------------------------------------------------------ transitions
@@ -320,7 +357,8 @@ export class RiderController {
     const yawErr = fakie ? 180 - yawRaw : yawRaw;
     const pitchErr = Math.asin(clamp(Math.abs(_f.dot(n)), 0, 1)) / DEG;
     const inverted = _u.dot(n) < 0.2;
-    const holding = L.requireInputsReleased && this.trickInputHeld(input);
+    // tiny unintended airs (rolling over a knuckle) don't need released inputs
+    const holding = L.requireInputsReleased && this.airTime >= L.smallAirTime && this.trickInputHeld(input);
     const whipErr = angleToTurn(this.whipAngle) / DEG;
     const barErr = angleToTurn(this.barAngle) / DEG;
     const variation = Math.max(...VARIATIONS.map((v) => this.varBlend[v]));

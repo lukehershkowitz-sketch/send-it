@@ -67,7 +67,9 @@ export interface RiderEvents {
   takeoff: { popped: boolean };
   landed: LandingResult;
   bail: { reason: string; landing: LandingResult | null };
-  respawn: Record<string, never>;
+  respawn: { checkpoint: number };
+  checkpoint: { index: number };
+  finish: Record<string, never>;
   grindStart: { type: GrindType };
   grindEnd: { type: GrindType; time: number };
   manualStart: { nose: boolean };

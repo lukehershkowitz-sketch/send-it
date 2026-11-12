@@ -9,6 +9,15 @@ const V = (x: number, y: number, z: number) => new Vector3(x, y, z);
 const UPV = V(0, 1, 0);
 const UNIT_CYL = new CylinderGeometry(1, 1, 1, 7);
 const UNIT_BOX = new BoxGeometry(1, 1, 1);
+const WHEEL_GEO = (() => {
+  const knobs = new TorusGeometry(0.236, 0.024, 4, 40);
+  return {
+    tire: new TorusGeometry(0.222, 0.036, 8, 24),
+    knobs, // a second, chunkier low-poly torus reads as tread
+    wall: new TorusGeometry(0.2, 0.012, 4, 24),
+    rim: new TorusGeometry(0.185, 0.013, 4, 24),
+  };
+})();
 
 export interface PoseParams {
   crouch: number; wheelAngle: number; bar: number; whip: number;
@@ -44,6 +53,8 @@ export class RiderRig {
   // rider limb meshes
   private limbs: Record<string, Mesh> = {};
   private torso!: Mesh;
+  private pelvis!: Mesh;
+  private joints: Record<string, Mesh> = {};
   private head!: Group;
   private feet: Mesh[] = [];
   private hands: Mesh[] = [];
@@ -56,7 +67,8 @@ export class RiderRig {
     this.mats = {
       frame: L(colors.frame), chrome: L(0xcfd6dc), tire: L(0x1d1d1f), rim: L(0x9aa3ab), dark: L(0x2a2d31),
       shirt: L(colors.rider), pants: L(colors.pants), skin: L(0xe0a77f), helmet: L(colors.helmet),
-      shoe: L(0xe8e8e8), visor: L(0x222222), grip: L(0x111111),
+      shoe: L(0xe8e8e8), visor: L(0x222222), grip: L(0x111111), glove: L(0x2b2b30), sole: L(0x1a1a1a),
+      accent: L(0xffd23f), goggle: L(0xff8a3d), sidewall: L(0x6b4a2a), chain: L(0x55595e),
     };
     this.root.add(this.bikeBody, this.riderBody);
     this.bikeBody.position.set(0, 0.45, 0);
@@ -96,18 +108,24 @@ export class RiderRig {
 
   private wheel(): Group {
     const g = new Group();
-    const tire = new Mesh(new TorusGeometry(0.222, 0.034, 6, 20), this.mats.tire);
+    const tire = new Mesh(WHEEL_GEO.tire, this.mats.tire);
     tire.rotation.y = Math.PI / 2;
-    const rim = new Mesh(new TorusGeometry(0.185, 0.012, 4, 20), this.mats.rim);
+    const knobs = new Mesh(WHEEL_GEO.knobs, this.mats.tire);
+    knobs.rotation.y = Math.PI / 2;
+    const wall = new Mesh(WHEEL_GEO.wall, this.mats.sidewall);
+    wall.rotation.y = Math.PI / 2;
+    const rim = new Mesh(WHEEL_GEO.rim, this.mats.rim);
     rim.rotation.y = Math.PI / 2;
+    g.add(knobs, wall);
     const hub = new Mesh(UNIT_CYL, this.mats.chrome);
     hub.scale.set(0.025, 0.11, 0.025);
     hub.rotation.z = Math.PI / 2;
     g.add(tire, rim, hub);
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 9; i++) {
       const s = new Mesh(UNIT_BOX, this.mats.rim);
-      s.scale.set(0.006, 0.37, 0.006);
-      s.rotation.x = (i * Math.PI) / 4;
+      s.scale.set(0.004, 0.37, 0.004);
+      s.rotation.x = (i * Math.PI) / 9;
+      s.position.x = (i % 2 ? 1 : -1) * 0.012;
       g.add(s);
     }
     return g;
@@ -160,6 +178,12 @@ export class RiderRig {
     this.rearWheel = this.wheel();
     this.rearWheel.position.copy(RA);
     F.add(this.rearWheel);
+    const cog = new Mesh(UNIT_CYL, m.chrome);
+    cog.scale.set(0.035, 0.01, 0.035); cog.rotation.z = Math.PI / 2; cog.position.copy(RA).setX(-0.05);
+    F.add(cog);
+    for (const dy of [1, -1]) {
+      this.tube(F, V(-0.05, BB.y + 0.085 * dy, BB.z), V(-0.05, RA.y + 0.035 * dy, RA.z), 0.006, m.chain);
+    }
     // pegs
     for (const x of [0.08, -0.08]) {
       const peg = new Mesh(UNIT_CYL, m.chrome);
@@ -180,7 +204,8 @@ export class RiderRig {
       const base = V(0.075 * s, stem.y, stem.z + 0.01);
       const bend = V(0.27 * s, gripY, gripZ + 0.01);
       this.tube(FE, base, bend, 0.013, m.chrome);
-      this.tube(FE, bend, V(0.36 * s, gripY, gripZ), 0.016, m.grip);
+      this.tube(FE, bend, V(0.36 * s, gripY, gripZ), 0.017, m.grip);
+      this.tube(FE, V(0.36 * s, gripY, gripZ), V(0.375 * s, gripY, gripZ), 0.02, m.accent);
     }
     this.tube(FE, V(0.18, 0.97, 0.295), V(-0.18, 0.97, 0.295), 0.011, m.chrome);
     for (const x of [0.08, -0.08]) {
@@ -208,22 +233,39 @@ export class RiderRig {
     limb('upperL', m.shirt); limb('upperR', m.shirt); limb('foreL', m.skin); limb('foreR', m.skin);
     limb('neck', m.skin);
     this.torso = new Mesh(UNIT_BOX, m.shirt);
+    const stripe = new Mesh(UNIT_BOX, m.accent);
+    stripe.position.set(0, 0.12, 0); stripe.scale.set(1.03, 0.1, 1.04);
+    this.torso.add(stripe);
     this.rider.add(this.torso);
+    this.pelvis = new Mesh(UNIT_BOX, m.pants);
+    this.rider.add(this.pelvis);
+    const jointGeo = new SphereGeometry(1, 8, 6);
+    for (const [name, mat] of [['kneeL', m.pants], ['kneeR', m.pants], ['elbowL', m.shirt], ['elbowR', m.shirt], ['shL', m.shirt], ['shR', m.shirt]] as const) {
+      const j = new Mesh(jointGeo, mat);
+      this.joints[name] = j;
+      this.rider.add(j);
+    }
     this.head = new Group();
-    const helmet = new Mesh(new SphereGeometry(0.145, 10, 8), m.helmet);
-    const visor = new Mesh(UNIT_BOX, m.visor);
-    visor.scale.set(0.2, 0.06, 0.06);
-    visor.position.set(0, 0.0, 0.12);
+    const helmet = new Mesh(new SphereGeometry(0.145, 12, 9), m.helmet);
+    const chin = new Mesh(new TorusGeometry(0.11, 0.03, 5, 10, Math.PI), m.helmet);
+    chin.rotation.set(Math.PI / 2 + 0.35, 0, 0); chin.position.set(0, -0.07, 0.03);
+    const goggle = new Mesh(UNIT_BOX, m.goggle);
+    goggle.scale.set(0.2, 0.055, 0.05); goggle.position.set(0, 0.0, 0.125);
+    const strap = new Mesh(new TorusGeometry(0.143, 0.012, 4, 16), m.visor);
+    strap.rotation.x = Math.PI / 2; strap.position.y = 0.0;
     const peak = new Mesh(UNIT_BOX, m.helmet);
-    peak.scale.set(0.22, 0.02, 0.1);
-    peak.position.set(0, 0.06, 0.14);
-    this.head.add(helmet, visor, peak);
+    peak.scale.set(0.22, 0.02, 0.12);
+    peak.position.set(0, 0.075, 0.15); peak.rotation.x = -0.25;
+    this.head.add(helmet, chin, goggle, strap, peak);
     this.rider.add(this.head);
     for (let i = 0; i < 2; i++) {
       const f = new Mesh(UNIT_BOX, m.shoe);
       f.scale.set(0.1, 0.07, 0.24);
+      const sole = new Mesh(UNIT_BOX, m.sole);
+      sole.position.y = -0.55; sole.scale.set(1.05, 0.25, 1.02);
+      f.add(sole);
       this.feet.push(f);
-      const h = new Mesh(new SphereGeometry(0.045, 6, 5), m.skin);
+      const h = new Mesh(new SphereGeometry(0.048, 7, 5), m.glove);
       this.hands.push(h);
       this.rider.add(f, h);
     }
@@ -266,6 +308,8 @@ export class RiderRig {
       const kneePole = this._t.set(0.15 * s, 0.1 + p.superman * 0.8, 1 - p.superman * 1.6);
       solveIK(hipS, foot, 0.47, 0.46, kneePole, this._k);
       placeSeg(L[side === 0 ? 'thighL' : 'thighR'], hipS, this._k, 0.065);
+      this.joints[side === 0 ? 'kneeL' : 'kneeR'].position.copy(this._k);
+      this.joints[side === 0 ? 'kneeL' : 'kneeR'].scale.setScalar(0.06);
       placeSeg(L[side === 0 ? 'shinL' : 'shinR'], this._k, foot, 0.048);
       // ---- arms: grips → (barspin) let go → (tuck no-hander) thrown up and out
       const grip = this._a.set(0.34 * s, 1.05, 0.27)
@@ -276,6 +320,10 @@ export class RiderRig {
       const shS = this._b.copy(sh).add(this._t.set(0.18 * s, -0.02, 0));
       solveIK(shS, grip, 0.3, 0.3, this._t.set(1.0 * s, -0.4, -0.6), this._k);
       placeSeg(L[side === 0 ? 'upperL' : 'upperR'], shS, this._k, 0.045);
+      this.joints[side === 0 ? 'elbowL' : 'elbowR'].position.copy(this._k);
+      this.joints[side === 0 ? 'elbowL' : 'elbowR'].scale.setScalar(0.043);
+      this.joints[side === 0 ? 'shL' : 'shR'].position.copy(shS);
+      this.joints[side === 0 ? 'shL' : 'shR'].scale.setScalar(0.06);
       placeSeg(L[side === 0 ? 'foreL' : 'foreR'], this._k, grip, 0.038);
     }
     // torso
@@ -284,6 +332,9 @@ export class RiderRig {
     this.torso.position.copy(hip).addScaledVector(td, 0.5);
     this.torso.quaternion.setFromUnitVectors(UPV, td.divideScalar(tl));
     this.torso.scale.set(0.36, tl + 0.12, 0.2);
+    this.pelvis.position.copy(hip);
+    this.pelvis.quaternion.copy(this.torso.quaternion);
+    this.pelvis.scale.set(0.3, 0.16, 0.2);
     const neckTop = this._b.copy(sh).addScaledVector(td, 0.12).add(this._t.set(0, 0.02, 0.04));
     placeSeg(L.neck, sh, neckTop, 0.05);
     this.head.position.copy(neckTop).add(this._t.set(0, 0.11, 0.03));

@@ -30,9 +30,23 @@ export interface RailSeg {
   radius: number;
 }
 
+export interface Checkpoint { pos: [number, number, number]; yaw: number; speed?: number }
+
 export interface ParkDef {
   name: string;
-  spawn: { pos: [number, number, number]; yaw: number };
+  spawn: Checkpoint;
+  /** Respawn points along a line; you respawn at the last one you rolled past. */
+  checkpoints?: Checkpoint[];
+  /** Reaching this ends the line and sends you back to the start. */
+  finish?: { pos: [number, number, number]; radius: number };
+  decor?: {
+    theme?: 'meadow' | 'forest';
+    trees?: number;
+    rocks?: number;
+    clear?: number;       // keep trees this far from the riding path
+    pathWidth?: number;   // visual dirt track along the path (0 = none)
+    lamps?: number;       // spacing of lamp posts for night mode (m)
+  };
   pieces: PieceDef[];
 }
 
@@ -47,11 +61,18 @@ export class World {
   readonly rails: RailSeg[] = [];
   readonly spawnPos: Vector3;
   readonly spawnYaw: number;
+  readonly checkpoints: { pos: Vector3; yaw: number; speed: number }[];
+  readonly finish: { pos: Vector3; radius: number } | null;
+  /** Riding path (spawn → pieces in order), used for decor placement. */
+  readonly path: Vector3[] = [];
   private rc = new Raycaster();
 
   constructor(readonly def: ParkDef) {
     this.spawnPos = new Vector3(...def.spawn.pos);
     this.spawnYaw = def.spawn.yaw * DEG;
+    this.checkpoints = (def.checkpoints ?? []).map((c) => ({ pos: new Vector3(...c.pos), yaw: c.yaw * DEG, speed: c.speed ?? 0 }));
+    this.finish = def.finish ? { pos: new Vector3(...def.finish.pos), radius: def.finish.radius } : null;
+    this.path.push(this.spawnPos.clone());
     for (const p of def.pieces) {
       const m = new Matrix4().compose(
         new Vector3(...p.pos),
@@ -59,7 +80,12 @@ export class World {
         new Vector3(1, 1, 1),
       );
       const built = buildPiece(p);
+      if (p.type !== 'ground') {
+        this.path.push(new Vector3(...p.pos));
+        if (built.length) this.path.push(new Vector3(0, 0, built.length).applyMatrix4(m));
+      }
       for (const part of built.parts) {
+        part.mesh.userData.pieceType = p.type;
         part.mesh.geometry.applyMatrix4(m);
         part.mesh.geometry.computeBoundingSphere();
         part.mesh.geometry.computeBoundingBox();

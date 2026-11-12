@@ -2,7 +2,7 @@ import {
   BoxGeometry, BufferGeometry, CylinderGeometry, DoubleSide, Material, Mesh, MeshLambertMaterial, PlaneGeometry, Vector3,
 } from 'three';
 import { DEG } from '../core/math';
-import { extrudeRuns, profileSides, Turtle, type P2 } from './geometry';
+import { extrudeRuns, flaredSides, Turtle, type P2 } from './geometry';
 import type { ColliderKind, Lip, RailSeg } from './World';
 
 /**
@@ -11,21 +11,21 @@ import type { ColliderKind, Lip, RailSeg } from './World';
  */
 export type PieceDef =
   | { type: 'ground'; pos: [number, number, number]; yaw?: number; size: number }
-  | { type: 'kicker'; pos: [number, number, number]; yaw?: number; height: number; angle: number; width: number }
+  | { type: 'kicker'; pos: [number, number, number]; yaw?: number; height: number; angle: number; width: number; flare?: number }
   | {
       type: 'landing'; pos: [number, number, number]; yaw?: number;
       height: number; slope: number; width: number; deck?: number; faceAngle?: number;
-      knuckleRadius?: number; transitionRadius?: number;
+      knuckleRadius?: number; transitionRadius?: number; flare?: number;
     }
   | { type: 'rail'; pos: [number, number, number]; yaw?: number; length: number; height: number }
   | { type: 'ledge'; pos: [number, number, number]; yaw?: number; length: number; height: number; width: number };
 
 export interface BuiltPart { mesh: Mesh; collide: ColliderKind | null }
-export interface BuiltPiece { parts: BuiltPart[]; lips: Lip[]; rails?: RailSeg[] }
+export interface BuiltPiece { parts: BuiltPart[]; lips: Lip[]; rails?: RailSeg[]; length?: number }
 
 const mats = {
   dirtTop: new MeshLambertMaterial({ color: 0xb98454, flatShading: true }),
-  dirtSide: new MeshLambertMaterial({ color: 0x8a5a36, flatShading: true, side: DoubleSide }),
+  dirtSide: new MeshLambertMaterial({ color: 0x9a6a42, flatShading: true, side: DoubleSide }),
   metal: new MeshLambertMaterial({ color: 0xc9d1d8 }),
   post: new MeshLambertMaterial({ color: 0x4b545c }),
   ground: new MeshLambertMaterial({ color: 0x8fa36a }),
@@ -76,8 +76,9 @@ export function buildPiece(def: PieceDef): BuiltPiece {
       return {
         parts: [
           part(extrudeRuns(runs, def.width), mats.dirtTop, 'surface'),
-          part(profileSides(runs, def.width), mats.dirtSide, 'surface'),
+          part(flaredSides(runs, def.width, def.flare ?? 0.7), mats.dirtSide, 'surface'),
         ],
+        length,
         lips: [{
           pos: new Vector3(0, def.height, length),
           dir: new Vector3(0, 0, 1),
@@ -89,11 +90,13 @@ export function buildPiece(def: PieceDef): BuiltPiece {
     }
     case 'landing': {
       const runs = landingProfile(def);
+      const last = runs[runs.length - 1];
       return {
         parts: [
           part(extrudeRuns(runs, def.width), mats.dirtTop, 'surface'),
-          part(profileSides(runs, def.width), mats.dirtSide, 'surface'),
+          part(flaredSides(runs, def.width, def.flare ?? 0.7), mats.dirtSide, 'surface'),
         ],
+        length: last[last.length - 1][0],
         lips: [],
       };
     }
@@ -107,7 +110,7 @@ export function buildPiece(def: PieceDef): BuiltPiece {
         parts.push(part(edge, mats.coping, null));
         rails.push({ a: new Vector3(x, H - 0.02, 0), b: new Vector3(x, H - 0.02, L), radius: 0.02 });
       }
-      return { parts, lips: [], rails };
+      return { parts, lips: [], rails, length: L };
     }
     case 'rail': {
       const r = 0.05, L = def.length, H = def.height;
@@ -119,7 +122,7 @@ export function buildPiece(def: PieceDef): BuiltPiece {
         const foot = new BoxGeometry(0.4, 0.04, 0.25).translate(0, 0.02, z);
         parts.push(part(foot, mats.post, null));
       }
-      return { parts, lips: [], rails: [{ a: new Vector3(0, H, 0), b: new Vector3(0, H, L), radius: r }] };
+      return { parts, lips: [], length: L, rails: [{ a: new Vector3(0, H, 0), b: new Vector3(0, H, L), radius: r }] };
     }
   }
 }

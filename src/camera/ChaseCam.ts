@@ -24,7 +24,7 @@ export class ChaseCam {
   private look = new Vector3();
   private initialized = false;
 
-  constructor(readonly camera: PerspectiveCamera, private world: World) {}
+  constructor(readonly camera: PerspectiveCamera, public world: World) {}
 
   snap(t: CamTarget) {
     this.yaw = t.motionYaw;

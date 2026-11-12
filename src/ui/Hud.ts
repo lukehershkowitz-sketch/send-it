@@ -20,7 +20,6 @@ export class Hud {
   private restartFill = $('restart-fill');
   private speedo = $('speedo');
   private help = $('help');
-  private pause = $('pause');
   private padNote = $('pad-note');
   private combo = $('combo');
   private comboList = $('combo-list');
@@ -43,6 +42,7 @@ export class Hud {
   }
 
   bail(reason: string) { this.show('BAIL', reason, 'bail'); }
+  flash(title: string, sub: string) { this.show(title, sub, 'clean'); }
 
   pop(p: PopInfo) {
     if (p.label === 'HOP') return;
@@ -137,7 +137,6 @@ export class Hud {
 
   hideSummary() { this.summary.classList.add('hidden'); }
   toggleHelp(force?: boolean) { this.help.classList.toggle('hidden', force === undefined ? undefined : !force); }
-  setPaused(p: boolean) { this.pause.classList.toggle('hidden', !p); }
 }
 
 function entryHtml(e: LineEntry) {

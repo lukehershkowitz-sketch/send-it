@@ -8,12 +8,15 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "sim": "tsx scripts/sim.ts"
+    "sim": "tsx scripts/sim.ts",
+    "gen:dirtline": "tsx scripts/gen-dirtline.ts",
+    "ride:dirtline": "tsx scripts/ride-dirtline.ts"
   },
   "dependencies": {
     "three": "^0.187.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "@types/three": "^0.187.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

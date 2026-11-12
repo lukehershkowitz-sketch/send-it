@@ -1,0 +1,379 @@
+{
+  "name": "Dirt Line",
+  "spawn": {
+    "pos": [
+      0,
+      3.6,
+      -25.2
+    ],
+    "yaw": 0
+  },
+  "checkpoints": [
+    {
+      "pos": [
+        0,
+        0,
+        -9.19
+      ],
+      "yaw": 0,
+      "speed": 11
+    },
+    {
+      "pos": [
+        -0.84,
+        0,
+        16.25
+      ],
+      "yaw": 4,
+      "speed": 11
+    },
+    {
+      "pos": [
+        0.18,
+        0,
+        42.82
+      ],
+      "yaw": 8,
+      "speed": 11
+    },
+    {
+      "pos": [
+        4.62,
+        0,
+        69.89
+      ],
+      "yaw": 5,
+      "speed": 11
+    },
+    {
+      "pos": [
+        8.26,
+        0,
+        97.14
+      ],
+      "yaw": -1,
+      "speed": 11
+    },
+    {
+      "pos": [
+        8.6,
+        0,
+        125.75
+      ],
+      "yaw": -5,
+      "speed": 11
+    },
+    {
+      "pos": [
+        4.98,
+        0,
+        155.14
+      ],
+      "yaw": 0,
+      "speed": 11
+    },
+    {
+      "pos": [
+        3.73,
+        0,
+        183.77
+      ],
+      "yaw": 6,
+      "speed": 11
+    },
+    {
+      "pos": [
+        6.93,
+        0,
+        214.23
+      ],
+      "yaw": 6,
+      "speed": 11
+    }
+  ],
+  "finish": {
+    "pos": [
+      11.572,
+      0,
+      258.423
+    ],
+    "radius": 6
+  },
+  "decor": {
+    "theme": "forest",
+    "trees": 900,
+    "rocks": 120,
+    "clear": 9,
+    "pathWidth": 3.8,
+    "lamps": 18
+  },
+  "pieces": [
+    {
+      "type": "ground",
+      "pos": [
+        0,
+        0,
+        120
+      ],
+      "size": 700
+    },
+    {
+      "type": "landing",
+      "pos": [
+        0,
+        0,
+        -30
+      ],
+      "height": 3.6,
+      "slope": 24,
+      "width": 5,
+      "deck": 5,
+      "faceAngle": 45,
+      "knuckleRadius": 3,
+      "transitionRadius": 7
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        0,
+        0,
+        2.811
+      ],
+      "yaw": 0,
+      "height": 1.4,
+      "angle": 32,
+      "width": 3.2
+    },
+    {
+      "type": "landing",
+      "pos": [
+        0,
+        0,
+        8.894
+      ],
+      "height": 1.5,
+      "slope": 25,
+      "width": 5.2,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": 0
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        0,
+        0,
+        28.221
+      ],
+      "yaw": 4,
+      "height": 1.6,
+      "angle": 33,
+      "width": 3.2
+    },
+    {
+      "type": "landing",
+      "pos": [
+        0.469,
+        0,
+        34.926
+      ],
+      "height": 1.7,
+      "slope": 26,
+      "width": 5.2,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": 4
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        1.852,
+        0,
+        54.706
+      ],
+      "yaw": 8,
+      "height": 1.8,
+      "angle": 34,
+      "width": 3.4
+    },
+    {
+      "type": "landing",
+      "pos": [
+        2.84,
+        0,
+        61.734
+      ],
+      "height": 1.9,
+      "slope": 27,
+      "width": 5.4,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": 8
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        5.666,
+        0,
+        81.841
+      ],
+      "yaw": 5,
+      "height": 1.8,
+      "angle": 34,
+      "width": 3.4
+    },
+    {
+      "type": "landing",
+      "pos": [
+        6.284,
+        0,
+        88.911
+      ],
+      "height": 1.9,
+      "slope": 27,
+      "width": 5.4,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": 5
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        8.054,
+        0,
+        109.138
+      ],
+      "yaw": -1,
+      "height": 2,
+      "angle": 35,
+      "width": 3.4
+    },
+    {
+      "type": "landing",
+      "pos": [
+        7.922,
+        0,
+        116.68
+      ],
+      "height": 2.2,
+      "slope": 28,
+      "width": 5.4,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": -1
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        7.555,
+        0,
+        137.705
+      ],
+      "yaw": -5,
+      "height": 2.2,
+      "angle": 36,
+      "width": 3.6
+    },
+    {
+      "type": "landing",
+      "pos": [
+        6.86,
+        0,
+        145.646
+      ],
+      "height": 2.4,
+      "slope": 28,
+      "width": 5.6,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": -5
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        4.98,
+        0,
+        167.137
+      ],
+      "yaw": 0,
+      "height": 2,
+      "angle": 35,
+      "width": 3.4
+    },
+    {
+      "type": "landing",
+      "pos": [
+        4.98,
+        0,
+        174.68
+      ],
+      "height": 2.2,
+      "slope": 28,
+      "width": 5.4,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": 0
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        4.98,
+        0,
+        195.709
+      ],
+      "yaw": 6,
+      "height": 2.4,
+      "angle": 37,
+      "width": 3.8
+    },
+    {
+      "type": "landing",
+      "pos": [
+        5.855,
+        0,
+        204.036
+      ],
+      "height": 2.7,
+      "slope": 29,
+      "width": 5.8,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": 6
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        8.181,
+        0,
+        226.161
+      ],
+      "yaw": 6,
+      "height": 2.6,
+      "angle": 38,
+      "width": 4
+    },
+    {
+      "type": "landing",
+      "pos": [
+        9.075,
+        0,
+        234.665
+      ],
+      "height": 3,
+      "slope": 30,
+      "width": 6,
+      "deck": 0.3,
+      "knuckleRadius": 2,
+      "transitionRadius": 5,
+      "yaw": 6
+    }
+  ]
+}

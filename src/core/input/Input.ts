@@ -93,6 +93,12 @@ export class Input {
     if (stickLook) { s.barspin = 0; s.tailwhip = false; } // right stick is the camera while R3 held
   }
 
+  /** Treat everything currently held as already-seen (after closing a menu). */
+  flush(): void {
+    this.tapped.clear();
+    for (const a of ACTIONS) this.prev[a] = this.values[a] = this.held(a) ? 1 : 0;
+  }
+
   justPressed(a: Action): boolean { return this.values[a] > 0.5 && this.prev[a] <= 0.5; }
   held(a: Action): boolean { return this.values[a] > 0.5; }
 }
