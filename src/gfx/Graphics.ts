@@ -222,6 +222,8 @@ export class Graphics {
     t.polygonOffsetFactor = l.polygonOffsetFactor;
     t.polygonOffsetUnits = l.polygonOffsetUnits;
     t.vertexColors = l.vertexColors;
+    t.emissive.copy(l.emissive);
+    t.emissiveIntensity = l.emissiveIntensity;
     t.needsUpdate = true;
   }
 }

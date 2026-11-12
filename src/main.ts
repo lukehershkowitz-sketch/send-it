@@ -11,7 +11,7 @@ import { parkById } from './world/parks';
 import { textures } from './world/textures';
 import { RiderController } from './rider/RiderController';
 import { RiderRig, makeSnapshot, snapshot } from './rider/RiderRig';
-import { loadRigModels } from './rider/models';
+import { loadRigModels, loadSceneryKit, type ModelKit } from './rider/models';
 import { Recorder, ReplayPlayer } from './replay/Replay';
 import { TouchControls, isTouchDevice } from './ui/Touch';
 import type { RunSummary } from './tricks/Run';
@@ -82,6 +82,21 @@ const touch = isTouchDevice() ? new TouchControls(document.body) : null;
 graphics.setSun(decor.sun, lighting === 'night');
 graphics.setQuality(qualityFor(settings));
 applyHemi();
+// Blender scenery kit: used on Medium/High; Low keeps the simple built-in shapes
+let sceneryKit: ModelKit | null = null;
+const kitForQuality = () => (graphics.quality === 'low' ? null : sceneryKit);
+let decorHasKit = false;
+function rebuildDecor() {
+  decor.dispose();
+  const kit = kitForQuality();
+  decor = decorate(scene, world, renderer, lighting, kit);
+  decorHasKit = !!kit;
+  graphics.setSun(decor.sun, lighting === 'night');
+  graphics.refresh(scene);
+  applyHemi();
+}
+void loadSceneryKit().then((kit) => { sceneryKit = kit; if (kit && kitForQuality() && !decorHasKit) rebuildDecor(); });
+
 // Blender-built rider + bike (falls back to the built-in parts if the file can't load)
 void loadRigModels().then((parts) => {
   if (!parts) return;
@@ -299,7 +314,11 @@ function applyHemi() {
 
 function applySettings(s: Settings) {
   saveSettings(s);
-  if (qualityFor(s) !== graphics.quality) { graphics.setQuality(qualityFor(s)); applyHemi(); }
+  if (qualityFor(s) !== graphics.quality) {
+    graphics.setQuality(qualityFor(s));
+    applyHemi();
+    if (!!kitForQuality() !== decorHasKit) rebuildDecor(); // Low ↔ Medium/High swaps the scenery set
+  }
   applyTuningSettings(s);
   sfx.setVolume(s.volume);
   sfx.setMuted(s.muted);
@@ -318,7 +337,8 @@ function loadPark(id: string, light: Lighting) {
   world.root.traverse((o) => { const m = o as { geometry?: { dispose(): void } }; m.geometry?.dispose(); });
   world = new World(park.def);
   scene.add(world.root);
-  decor = decorate(scene, world, renderer, lighting);
+  decor = decorate(scene, world, renderer, lighting, kitForQuality());
+  decorHasKit = !!kitForQuality();
   graphics.setSun(decor.sun, lighting === 'night');
   graphics.refresh(scene);
   applyHemi();

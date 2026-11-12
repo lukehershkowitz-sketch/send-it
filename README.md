@@ -81,6 +81,13 @@ game recolours and re-shades them like any other part. Parts: `frame` / `front` 
 is missing the rig keeps its built-in procedural parts. You can also open the exported `.glb`
 in Blender, edit it, and re-export with the same object names.
 
+### Scenery kit
+`public/models/scenery.glb` comes from `blender/build_scenery.py` (same venv): pines, oak, birch,
+bushes, grass, stumps, rocks, three buildings, bench, bin, railing and a street lamp, each named
+`<kind>__<material>` with its base at the origin. `src/world/decor.ts` instances them (one draw
+call per kind × material) with per-instance tints for leaves, walls, rocks and grass. Graphics:
+Low keeps the simple built-in cones/boxes.
+
 ## Parks
 A park is a JSON file: `spawn`, optional `checkpoints` (you respawn rolling at the last one you passed),
 optional `finish` (reaching it banks the line and sends you back to the top), `decor`, and `pieces`

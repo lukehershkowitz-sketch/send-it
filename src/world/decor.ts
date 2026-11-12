@@ -8,6 +8,7 @@ import { TUNING } from '../tuning';
 import type { World } from './World';
 import { pieceMaterials } from './pieces';
 import { rng, textures } from './textures';
+import type { ModelKit } from '../rider/models';
 
 export type Lighting = 'day' | 'night';
 
@@ -62,7 +63,8 @@ export interface Decor {
 }
 
 /** Browser-only dressing: sky, fog, lights, textures, trees, rocks, dirt track, night lamps. */
-export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, lighting: Lighting): Decor {
+/** `kit` = the Blender scenery kit (null → built-in shapes, e.g. on Graphics: Low). */
+export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, lighting: Lighting, kit: ModelKit | null = null): Decor {
   const L = PRESETS[lighting];
   const night = lighting === 'night';
   const D = world.def.decor ?? {};
@@ -125,7 +127,7 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
     group.add(track);
   }
 
-  // ---------------------------------------------------------------- trees + rocks
+  // ---------------------------------------------------------------- trees, rocks, ground cover
   const rand = rng(7);
   const clear = D.clear ?? 26;
   const nTrees = D.trees ?? 260;
@@ -134,56 +136,183 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
   const area = world.bounds.clone().expandByScalar(clear);
   const blocked = (p: Vector3, c: number) =>
     distToPath(p, path) < c || (!!D.solidArea && p.x > area.min.x && p.x < area.max.x && p.z > area.min.z && p.z < area.max.z);
+  const randomSpot = (minClear: number, tries = 30): Vector3 | null => {
+    for (let t = 0; t < tries; t++) {
+      const p = new Vector3(bounds.x0 + rand() * (bounds.x1 - bounds.x0), 0, bounds.z0 + rand() * (bounds.z1 - bounds.z0));
+      if (!blocked(p, minClear)) return p;
+    }
+    return null;
+  };
   for (let tries = 0; spots.length < nTrees && tries < nTrees * 20; tries++) {
     const p = new Vector3(bounds.x0 + rand() * (bounds.x1 - bounds.x0), 0, bounds.z0 + rand() * (bounds.z1 - bounds.z0));
     if (blocked(p, clear + rand() * 4)) continue;
     spots.push(p);
   }
   const forest = theme === 'forest';
-  const crownMat = keep(hint(new MeshLambertMaterial({ color: 0xffffff, flatShading: true }), 0.95));
-  const crown = new InstancedMesh(keep(new ConeGeometry(1, 1, 6)), crownMat, spots.length);
-  const trunk = new InstancedMesh(keep(new CylinderGeometry(0.18, 0.25, 1, 5)), keep(new MeshLambertMaterial({ color: 0x5b4030 })), spots.length);
   const m = new Matrix4(), q = new Quaternion(), s = new Vector3(), p = new Vector3(), col = new Color();
-  spots.forEach((v, i) => {
-    const h = (forest ? 8 : 5) + rand() * (forest ? 12 : 7), w = (forest ? 1.8 : 1.6) + rand() * 1.6;
-    m.compose(p.set(v.x, 1.4 + h / 2, v.z), q.identity(), s.set(w, h, w));
-    crown.setMatrixAt(i, m);
-    m.compose(p.set(v.x, 1.0, v.z), q, s.set(1, 2.0, 1));
-    trunk.setMatrixAt(i, m);
-    crown.setColorAt(i, col.setHSL(0.3 + rand() * 0.08, forest ? 0.42 : 0.38, (forest ? 0.2 : 0.27) + rand() * 0.1));
-  });
-  crown.userData.tree = trunk.userData.tree = true;
-  group.add(crown, trunk);
+  const UPY = new Vector3(0, 1, 0);
 
-  const nRocks = D.rocks ?? 60;
-  const rocks = new InstancedMesh(keep(new IcosahedronGeometry(1, 0)), keep(new MeshLambertMaterial({ color: 0x8b8b84, flatShading: true })), nRocks);
-  for (let i = 0; i < nRocks; i++) {
-    let x = 0, z = 0;
-    for (let t = 0; t < 20; t++) {
-      x = bounds.x0 + rand() * (bounds.x1 - bounds.x0); z = bounds.z0 + rand() * (bounds.z1 - bounds.z0);
-      if (!blocked(p.set(x, 0, z), clear * 0.6)) break;
+  // ---- Blender kit (public/models/scenery.glb), instanced: one draw call per kind × material
+  type Xf = { pos: Vector3; yaw: number; scale: number; sy?: number; tint?: Color };
+  const kitMats = new Map<string, Material>();
+  const TINTED = new Set(['leaves', 'wall', 'rock', 'grass']);
+  const kitMat = (key: string): Material => {
+    let mm = kitMats.get(key);
+    if (mm) return mm;
+    const L = (color: number, rough: number, metal = 0, extra: object = {}) =>
+      keep(hint(new MeshLambertMaterial({ color, ...extra }), rough, metal));
+    switch (key) {
+      case 'leaves': mm = L(0xffffff, 0.9); break;
+      case 'grass': mm = L(0xffffff, 1, 0, { side: 2 }); break;
+      case 'wall': mm = L(0xffffff, 0.92); break;
+      case 'rock': mm = L(0xffffff, 0.95); break;
+      case 'bark': mm = L(0x5a4030, 0.95); break;
+      case 'birchbark': mm = L(0xe6e1d6, 0.8); break;
+      case 'window': mm = L(0x2b3646, 0.25, 0.3, night ? { emissive: 0xffb55a, emissiveIntensity: 0.55 } : {}); break;
+      case 'roof': mm = L(0x55585e, 0.9); break;
+      case 'trim': mm = L(0xd9d5cc, 0.85); break;
+      case 'wood': mm = L(0x8a5a33, 0.75); break;
+      case 'metal': mm = L(0x3d4248, 0.45, 0.6); break;
+      case 'awning': mm = L(0xb3392f, 0.85); break;
+      case 'bulb': mm = keep(new MeshBasicMaterial({ color: new Color(0xffe2a8).multiplyScalar(4) })); break;
+      default: mm = L(0x888888, 0.9);
     }
-    const sc = 0.3 + rand() * 0.9;
-    m.compose(p.set(x, sc * 0.3, z), q.setFromAxisAngle(new Vector3(0, 1, 0), rand() * 6), s.set(sc, sc * 0.7, sc));
-    rocks.setMatrixAt(i, m);
-  }
-  group.add(rocks);
+    kitMats.set(key, mm);
+    return mm;
+  };
+  /** Place many copies of a kit kind. Returns false if the kit doesn't have it. */
+  const instance = (kind: string, xfs: Xf[], flags: { tree?: boolean; noCast?: boolean } = {}): boolean => {
+    const pieces = kit?.get(kind);
+    if (!pieces || !xfs.length) return !!pieces;
+    for (const pc of pieces) {
+      const im = new InstancedMesh(pc.geometry, kitMat(pc.mat), xfs.length);
+      xfs.forEach((x, i) => {
+        m.compose(x.pos, q.setFromAxisAngle(UPY, x.yaw), s.set(x.scale, x.scale * (x.sy ?? 1), x.scale));
+        im.setMatrixAt(i, m);
+        if (TINTED.has(pc.mat)) im.setColorAt(i, x.tint ?? col.set(0xffffff));
+      });
+      im.computeBoundingSphere();
+      if (flags.tree) im.userData.tree = true;
+      if (flags.noCast) im.userData.noCast = true;
+      group.add(im);
+    }
+    return true;
+  };
+  const pick = <T,>(w: [T, number][]): T => {
+    let r = rand() * w.reduce((a, [, x]) => a + x, 0);
+    for (const [v, x] of w) if ((r -= x) <= 0) return v;
+    return w[0][0];
+  };
+  const leafTint = (kind: string) => kind === 'birch'
+    ? new Color().setHSL(0.24 + rand() * 0.06, 0.45, 0.36 + rand() * 0.08)
+    : new Color().setHSL(0.28 + rand() * 0.08, forest ? 0.42 : 0.4, (forest ? 0.2 : 0.26) + rand() * 0.1);
 
-  // ---------------------------------------------------------------- urban: buildings around the plaza
+  if (kit) {
+    const weights: [string, number][] = forest ? [['pine_a', 45], ['pine_b', 40], ['birch', 15]]
+      : theme === 'urban' ? [['oak', 50], ['pine_a', 30], ['birch', 20]] : [['pine_a', 30], ['oak', 35], ['birch', 20], ['pine_b', 15]];
+    const byKind = new Map<string, Xf[]>();
+    for (const v of spots) {
+      const kind = pick(weights);
+      const sc = (forest ? 0.85 : 0.7) + rand() * (forest ? 0.75 : 0.55);
+      if (!byKind.has(kind)) byKind.set(kind, []);
+      byKind.get(kind)!.push({ pos: v, yaw: rand() * 6.28, scale: sc, sy: 0.9 + rand() * 0.25, tint: leafTint(kind) });
+    }
+    for (const [kind, xfs] of byKind) instance(kind, xfs, { tree: true });
+
+    // bushes + stumps near the edge of the clearing, grass tufts closer in
+    if (theme !== 'urban' || !D.solidArea) {
+      const bushes: Xf[] = [], tufts: Xf[] = [], stumps: Xf[] = [];
+      const minPath = Math.max((D.pathWidth ?? 0) / 2 + 1.2, 3);
+      for (let i = 0; i < Math.round(nTrees * 0.35); i++) {
+        const v = randomSpot(clear * 0.55);
+        if (v) bushes.push({ pos: v, yaw: rand() * 6.28, scale: 0.7 + rand() * 0.8, tint: leafTint('bush') });
+      }
+      for (let i = 0; i < (forest ? 900 : 600); i++) {
+        const v = randomSpot(minPath + rand() * clear, 12);
+        if (v) tufts.push({ pos: v, yaw: rand() * 6.28, scale: 1 + rand() * 1.4, tint: new Color().setHSL(0.24 + rand() * 0.07, 0.45, 0.3 + rand() * 0.1) });
+      }
+      if (forest) for (let i = 0; i < 30; i++) { const v = randomSpot(clear * 0.6); if (v) stumps.push({ pos: v, yaw: rand() * 6.28, scale: 0.8 + rand() * 0.6 }); }
+      instance('bush', bushes);
+      instance('grass', tufts, { noCast: true });
+      instance('stump', stumps);
+    }
+
+    const rocks: Xf[] = [];
+    for (let i = 0; i < (D.rocks ?? 60); i++) {
+      const v = randomSpot(clear * 0.6, 20);
+      if (v) rocks.push({ pos: v.setY(-0.1), yaw: rand() * 6.28, scale: 0.35 + rand() * 0.95, sy: 0.8 + rand() * 0.4, tint: new Color().setHSL(0.1, 0.04 + rand() * 0.05, 0.42 + rand() * 0.14) });
+    }
+    const rockKinds = ['rock_a', 'rock_b', 'rock_c'];
+    rockKinds.forEach((k, j) => instance(k, rocks.filter((_, i) => i % 3 === j)));
+  } else {
+    // built-in shapes (Graphics: Low, or the kit didn't load)
+    const crownMat = keep(hint(new MeshLambertMaterial({ color: 0xffffff, flatShading: true }), 0.95));
+    const crown = new InstancedMesh(keep(new ConeGeometry(1, 1, 6)), crownMat, spots.length);
+    const trunk = new InstancedMesh(keep(new CylinderGeometry(0.18, 0.25, 1, 5)), keep(new MeshLambertMaterial({ color: 0x5b4030 })), spots.length);
+    spots.forEach((v, i) => {
+      const h = (forest ? 8 : 5) + rand() * (forest ? 12 : 7), w = (forest ? 1.8 : 1.6) + rand() * 1.6;
+      m.compose(p.set(v.x, 1.4 + h / 2, v.z), q.identity(), s.set(w, h, w));
+      crown.setMatrixAt(i, m);
+      m.compose(p.set(v.x, 1.0, v.z), q, s.set(1, 2.0, 1));
+      trunk.setMatrixAt(i, m);
+      crown.setColorAt(i, col.setHSL(0.3 + rand() * 0.08, forest ? 0.42 : 0.38, (forest ? 0.2 : 0.27) + rand() * 0.1));
+    });
+    crown.userData.tree = trunk.userData.tree = true;
+    group.add(crown, trunk);
+
+    const nRocks = D.rocks ?? 60;
+    const rocks = new InstancedMesh(keep(new IcosahedronGeometry(1, 0)), keep(new MeshLambertMaterial({ color: 0x8b8b84, flatShading: true })), nRocks);
+    for (let i = 0; i < nRocks; i++) {
+      const v = randomSpot(clear * 0.6, 20) ?? new Vector3();
+      const sc = 0.3 + rand() * 0.9;
+      m.compose(p.set(v.x, sc * 0.3, v.z), q.setFromAxisAngle(UPY, rand() * 6), s.set(sc, sc * 0.7, sc));
+      rocks.setMatrixAt(i, m);
+    }
+    group.add(rocks);
+  }
+
+  // ---------------------------------------------------------------- urban: buildings, street furniture
   const nb = D.buildings ?? 0;
+  const cx = (world.bounds.min.x + world.bounds.max.x) / 2, cz = (world.bounds.min.z + world.bounds.max.z) / 2;
   if (nb > 0) {
-    const bm = new InstancedMesh(keep(new BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), keep(new MeshLambertMaterial({ color: 0xffffff })), nb);
     const ring = world.bounds.clone().expandByScalar(clear + 6);
+    const xfs: Xf[] = [];
     for (let i = 0; i < nb; i++) {
       const side = i % 4, t = rand();
       const x = side < 2 ? ring.min.x + t * (ring.max.x - ring.min.x) : side === 2 ? ring.min.x - 8 : ring.max.x + 8;
       const z = side >= 2 ? ring.min.z + t * (ring.max.z - ring.min.z) : side === 0 ? ring.min.z - 8 : ring.max.z + 8;
-      const w = 8 + rand() * 10, h = 6 + rand() * 18;
-      m.compose(p.set(x, 0, z), q.identity(), s.set(w, h, w));
-      bm.setMatrixAt(i, m);
-      bm.setColorAt(i, col.setHSL(0.08 + rand() * 0.06, 0.12 + rand() * 0.1, (night ? 0.18 : 0.55) + rand() * 0.15));
+      xfs.push({ pos: new Vector3(x, 0, z), yaw: Math.atan2(cx - x, cz - z), scale: 1, tint: new Color().setHSL(0.06 + rand() * 0.07, 0.12 + rand() * 0.18, 0.5 + rand() * 0.18) });
     }
-    group.add(bm);
+    if (kit?.has('building_a')) {
+      ['building_a', 'building_b', 'building_c'].forEach((k, j) => instance(k, xfs.filter((_, i) => i % 3 === j)));
+    } else {
+      const bm = new InstancedMesh(keep(new BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), keep(new MeshLambertMaterial({ color: 0xffffff })), nb);
+      xfs.forEach((x, i) => {
+        const w = 8 + rand() * 10, h = 6 + rand() * 18;
+        m.compose(x.pos, q.identity(), s.set(w, h, w));
+        bm.setMatrixAt(i, m);
+        bm.setColorAt(i, col.setHSL(0.08 + rand() * 0.06, 0.12 + rand() * 0.1, (night ? 0.18 : 0.55) + rand() * 0.15));
+      });
+      group.add(bm);
+    }
+  }
+  if (kit && theme === 'urban') {
+    // benches and bins around the edge of the park, railings a little further out
+    const benches: Xf[] = [], bins: Xf[] = [], rails: Xf[] = [];
+    let k = 0;
+    for (const [pt, dir] of samplePath(perimeter(world.bounds.clone().expandByScalar(3)), 9)) {
+      const yaw = Math.atan2(cx - pt.x, cz - pt.z);
+      (k++ % 3 === 2 ? bins : benches).push({ pos: pt, yaw: k % 3 === 2 ? 0 : Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2), scale: 1 });
+      void dir;
+    }
+    k = 0;
+    for (const [pt, dir] of samplePath(perimeter(world.bounds.clone().expandByScalar(6)), 4)) {
+      if (k++ % 6 === 5) continue; // gaps to walk through
+      rails.push({ pos: pt, yaw: Math.atan2(-dir.z, dir.x), scale: 1 });
+    }
+    instance('bench', benches);
+    instance('bin', bins);
+    instance('railing', rails);
   }
 
   // ---------------------------------------------------------------- night: lamp posts
@@ -200,19 +329,31 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
     const poleGeo = keep(new CylinderGeometry(0.07, 0.1, 5.5, 6)), bulbGeo = keep(new SphereGeometry(0.18, 8, 6));
     const poolGeo = keep(new PlaneGeometry(12, 12).rotateX(-Math.PI / 2));
     let side = 1;
+    const lampXfs: Xf[] = [];
     const lampPath = D.lampLayout === 'perimeter' ? perimeter(world.bounds.clone().expandByScalar(5)) : path;
     for (const [pt, dir] of samplePath(lampPath, spacing)) {
       const off = new Vector3(dir.z, 0, -dir.x).multiplyScalar(side * ((D.pathWidth ?? 4) / 2 + 3.5));
       side = -side;
       const base = pt.clone().add(off);
-      const pole = new Mesh(poleGeo, poleMat); pole.position.copy(base).setY(2.75);
-      const bulb = new Mesh(bulbGeo, bulbMat); bulb.position.copy(base).setY(5.5);
-      const halo = new Sprite(haloMat); halo.position.copy(bulb.position); halo.scale.set(2.2, 2.2, 1);
-      const pl = new Mesh(poolGeo, poolMat); pl.position.copy(base).setY(0.03);
-      bulb.userData.noCast = pl.userData.noCast = pl.userData.noReceive = true;
-      group.add(pole, bulb, halo, pl);
-      lampPos.push(bulb.position.clone());
+      const bulbPos = base.clone().setY(5.5);
+      if (kit?.has('lamp')) {
+        // arm reaches toward the riding line; the model's bulb sits 0.9 m out along +X at 5.33 m
+        const toward = off.clone().negate().normalize();
+        lampXfs.push({ pos: base, yaw: Math.atan2(-toward.z, toward.x), scale: 1 });
+        bulbPos.set(base.x + toward.x * 0.9, 5.33, base.z + toward.z * 0.9);
+      } else {
+        const pole = new Mesh(poleGeo, poleMat); pole.position.copy(base).setY(2.75);
+        const bulb = new Mesh(bulbGeo, bulbMat); bulb.position.copy(bulbPos);
+        bulb.userData.noCast = true;
+        group.add(pole, bulb);
+      }
+      const halo = new Sprite(haloMat); halo.position.copy(bulbPos); halo.scale.set(2.2, 2.2, 1);
+      const pl = new Mesh(poolGeo, poolMat); pl.position.set(bulbPos.x, 0.03, bulbPos.z);
+      pl.userData.noCast = pl.userData.noReceive = true;
+      group.add(halo, pl);
+      lampPos.push(bulbPos);
     }
+    instance('lamp', lampXfs);
     for (let i = 0; i < 4; i++) {
       const l = new PointLight(0xffc27a, 0, 26, 1.6);
       pool.push(l);
