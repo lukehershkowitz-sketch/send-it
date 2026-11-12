@@ -11,8 +11,52 @@
     #game { display: block; width: 100vw; height: 100vh; outline: none; }
     .hidden { display: none !important; }
 
-    #brand { position: fixed; top: 14px; right: 18px; font-weight: 900; font-style: italic; letter-spacing: .04em; font-size: 22px; text-shadow: var(--shadow); }
-    #brand small { display: block; font-size: 11px; font-weight: 600; font-style: normal; opacity: .8; letter-spacing: .12em; text-align: right; }
+    #hud-tr { position: fixed; top: 12px; right: 18px; text-align: right; text-shadow: var(--shadow); }
+    #brand { font-weight: 900; font-style: italic; letter-spacing: .04em; font-size: 14px; opacity: .85; }
+    #score { font-size: 40px; font-weight: 900; font-style: italic; font-variant-numeric: tabular-nums; line-height: 1.05; }
+    #timer { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    #timer.low { color: var(--bail); }
+    #pb { font-size: 12px; font-weight: 700; opacity: .8; letter-spacing: .06em; }
+
+    #combo { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); width: min(520px, 92vw); text-align: center; pointer-events: none; text-shadow: var(--shadow); opacity: 0; transition: opacity .15s; }
+    #combo.active, #combo.live { opacity: 1; }
+    #combo-live { font-size: 22px; font-weight: 900; font-style: italic; color: var(--stomp); min-height: 28px; }
+    #combo-list .entry { font-size: 14px; font-weight: 700; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    #combo-list .entry .pts { opacity: .85; font-variant-numeric: tabular-nums; }
+    #combo-list .entry .note { width: 100%; font-size: 10px; letter-spacing: .08em; opacity: .7; margin-top: -2px; }
+    #combo-list .more { font-size: 11px; opacity: .7; }
+    #combo-total { font-size: 30px; font-weight: 900; font-style: italic; font-variant-numeric: tabular-nums; }
+    #combo-total .mult { color: var(--clean); }
+    #combo-bankbar { margin: 4px auto 0; width: 120px; height: 3px; background: rgba(0,0,0,.3); border-radius: 2px; overflow: hidden; }
+    #combo-bank { height: 100%; width: 0; background: var(--clean); }
+
+    #bank-fx { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); text-align: center; font-size: 34px; font-weight: 900; font-style: italic; opacity: 0; pointer-events: none; text-shadow: var(--shadow); }
+    #bank-fx small { display: block; font-size: 12px; letter-spacing: .14em; font-style: normal; }
+    #bank-fx.bank { color: var(--clean); } #bank-fx.lost { color: var(--bail); }
+    #bank-fx.show { animation: bank 1.8s ease-out forwards; }
+    @keyframes bank { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.8); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1.05); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -30px); } }
+
+    #balance { position: fixed; left: 50%; top: 38%; transform: translateX(-50%); width: 240px; opacity: 0; transition: opacity .12s; pointer-events: none; }
+    #balance.show { opacity: 1; }
+    #balance-track { position: relative; height: 10px; border-radius: 5px; background: linear-gradient(90deg, rgba(255,90,95,.9), rgba(255,210,63,.8) 25%, rgba(124,242,198,.9) 42%, rgba(124,242,198,.9) 58%, rgba(255,210,63,.8) 75%, rgba(255,90,95,.9)); box-shadow: 0 1px 0 rgba(0,0,0,.3); }
+    #balance-needle { position: absolute; top: -5px; width: 4px; height: 20px; margin-left: -2px; background: #fff; border-radius: 2px; box-shadow: 0 0 6px rgba(0,0,0,.5); }
+    #balance-needle.danger { background: var(--bail); }
+    #balance-label { text-align: center; font-size: 10px; font-weight: 800; letter-spacing: .14em; margin-top: 6px; text-shadow: var(--shadow); }
+
+    #summary { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8,12,18,.6); padding: 16px; }
+    #summary .card { width: min(460px, 100%); max-height: 100%; overflow: auto; background: rgba(16,22,30,.92); border-radius: 12px; padding: 20px 22px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+    #summary h2 { margin: 0; font-size: 26px; font-weight: 900; font-style: italic; letter-spacing: .04em; }
+    #summary .park { font-size: 12px; opacity: .7; letter-spacing: .1em; }
+    #summary .big { font-size: 56px; font-weight: 900; font-style: italic; font-variant-numeric: tabular-nums; margin: 6px 0 0; }
+    #summary .newbest { color: var(--stomp); font-weight: 900; letter-spacing: .08em; }
+    #summary .pbline { opacity: .75; font-size: 13px; }
+    #summary table { width: 100%; margin: 14px 0 8px; border-collapse: collapse; font-size: 14px; }
+    #summary td { padding: 6px 4px; border-top: 1px solid rgba(255,255,255,.1); text-align: left; }
+    #summary td:last-child { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+    #summary .stats { font-size: 12px; opacity: .75; }
+    #summary .best { margin-top: 12px; font-size: 12px; line-height: 1.5; opacity: .9; }
+    #summary .again { margin-top: 16px; font-size: 13px; }
+    #summary kbd { padding: 0 5px; border-radius: 3px; background: rgba(255,255,255,.18); font: 11px ui-monospace, monospace; }
 
     #popup { position: fixed; left: 50%; top: 26%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; }
     #popup-title { font-size: clamp(36px, 7vw, 72px); font-weight: 900; font-style: italic; letter-spacing: .02em; text-shadow: var(--shadow); }
@@ -41,7 +85,9 @@
     #debug { position: fixed; top: 10px; left: 10px; padding: 8px 10px; background: rgba(10,14,20,.62); border-radius: 6px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; pointer-events: none; max-width: 470px; }
     #debug .ok { color: #7cf2a0; } #debug .bad { color: #ff7a7a; } #debug .dim { opacity: .6; } #debug u { text-decoration: none; opacity: .75; display: inline-block; margin-top: 4px; }
 
-    #help { position: fixed; left: 10px; bottom: 10px; padding: 10px 12px; background: rgba(10,14,20,.62); border-radius: 6px; font-size: 12px; line-height: 1.5; max-width: 360px; }
+    #help { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 16px; background: rgba(10,14,20,.86); border-radius: 10px; font-size: 13px; line-height: 1.6; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; z-index: 5; }
+    #help-hint { position: fixed; left: 12px; bottom: 12px; font-size: 12px; font-weight: 700; text-shadow: var(--shadow); opacity: .85; }
+    #help-hint kbd { padding: 0 5px; border-radius: 3px; background: rgba(255,255,255,.22); font: 11px ui-monospace, monospace; }
     #help h3 { margin: 0 0 4px; font-size: 12px; letter-spacing: .1em; opacity: .8; }
     #help kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 3px; background: rgba(255,255,255,.18); font: 11px ui-monospace, monospace; text-align: center; }
     #help .note { opacity: .65; margin-top: 4px; }
@@ -52,21 +98,35 @@
 </head>
 <body>
   <canvas id="game" tabindex="0"></canvas>
-  <div id="brand">SEND IT<small>PHASE 1 · FEEL PROTO</small></div>
+  <div id="hud-tr">
+    <div id="brand">SEND IT</div>
+    <div id="score">0</div>
+    <div id="timer">2:00</div>
+    <div id="pb"></div>
+  </div>
+  <div id="combo"><div id="combo-live"></div><div id="combo-list"></div><div id="combo-total"></div><div id="combo-bankbar"><div id="combo-bank"></div></div></div>
+  <div id="bank-fx"></div>
+  <div id="balance"><div id="balance-track"><div id="balance-needle"></div></div><div id="balance-label">BALANCE</div></div>
+  <div id="summary" class="hidden"></div>
   <div id="popup"><div id="popup-title"></div><div id="popup-sub"></div></div>
   <div id="pop-fx"></div>
   <div id="compress" class="bar"><div id="compress-fill"></div></div>
   <div id="restart" class="bar"><div id="restart-fill"></div></div>
   <div id="speedo">0</div>
   <div id="debug"></div>
-  <div id="help">
-    <h3>CONTROLS <span style="opacity:.6">(H to hide)</span></h3>
+  <div id="help-hint">Press <kbd>H</kbd> for controls</div>
+  <div id="help" class="hidden">
+    <h3>CONTROLS <span style="opacity:.6">(H to close)</span></h3>
     <kbd>W</kbd> pedal · <kbd>S</kbd> brake · <kbd>A</kbd><kbd>D</kbd> steer<br>
     <kbd>Space</kbd> hold to load, release at the lip to pop<br>
-    In air: <kbd>A</kbd><kbd>D</kbd> spin · <kbd>S</kbd> backflip · <kbd>W</kbd> frontflip<br>
+    In air: <kbd>A</kbd><kbd>D</kbd> spin · <kbd>S</kbd> backflip · <kbd>W</kbd> frontflip · <kbd>↑</kbd> flair<br>
+    <kbd>↓</kbd> tailwhip · <kbd>←</kbd><kbd>→</kbd> barspin · <kbd>Shift</kbd> tuck · <kbd>Q</kbd> superman · <kbd>E</kbd> can-can<br>
     Let go of everything before you land!<br>
-    <kbd>R</kbd> hold to restart · <kbd>Esc</kbd>/<kbd>P</kbd> pause · <kbd>`</kbd> debug · right-drag free-look<br>
-    Pad: LS steer/spin · RT pedal/frontflip · LT brake/backflip · A pop · R3+RS look
+    Hop onto the rail/ledge to grind (<kbd>A</kbd><kbd>D</kbd> balance, <kbd>Space</kbd> pop off) · hold <kbd>S</kbd> to icepick<br>
+    <kbd>B</kbd> manual · <kbd>B</kbd>+<kbd>S</kbd> nose manual (<kbd>W</kbd><kbd>S</kbd> balance) · hold <kbd>B</kbd> landing to link<br>
+    Line banks when you ride away clean · bail = line lost<br>
+    <kbd>R</kbd> hold: new run · <kbd>Enter</kbd> end run · <kbd>Esc</kbd> pause · <kbd>`</kbd> debug<br>
+    Pad: LS steer/spin · RT/LT pedal/brake/flips · A pop · B flair · RS bars/whip · LB tuck · X/Y superman/can-can · L3 manual
     <div class="note" id="pad-note"></div>
   </div>
   <div id="pause" class="hidden"><div>PAUSED<small>Esc / P to resume</small></div></div>

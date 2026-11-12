@@ -10,6 +10,11 @@ const UPV = V(0, 1, 0);
 const UNIT_CYL = new CylinderGeometry(1, 1, 1, 7);
 const UNIT_BOX = new BoxGeometry(1, 1, 1);
 
+export interface PoseParams {
+  crouch: number; wheelAngle: number; bar: number; whip: number;
+  tuck: number; superman: number; cancan: number; feetOff: number; handsOff: number; lean: number;
+}
+
 export interface RigColors { frame: number; rider: number; pants: number; helmet: number }
 
 /**
@@ -44,6 +49,7 @@ export class RiderRig {
   private hands: Mesh[] = [];
 
   private mats: Record<string, Material>;
+  private params: PoseParams = { crouch: 0, wheelAngle: 0, bar: 0, whip: 0, tuck: 0, superman: 0, cancan: 0, feetOff: 0, handsOff: 0, lean: 0 };
 
   constructor(colors: RigColors = { frame: 0xff5a1f, rider: 0x1fb5a6, pants: 0x2b2f3a, helmet: 0xf4f4f4 }) {
     const L = (c: number) => new MeshLambertMaterial({ color: c });
@@ -177,6 +183,13 @@ export class RiderRig {
       this.tube(FE, bend, V(0.36 * s, gripY, gripZ), 0.016, m.grip);
     }
     this.tube(FE, V(0.18, 0.97, 0.295), V(-0.18, 0.97, 0.295), 0.011, m.chrome);
+    for (const x of [0.08, -0.08]) {
+      const peg = new Mesh(UNIT_CYL, m.chrome);
+      peg.scale.set(0.022, 0.11, 0.022);
+      peg.rotation.z = Math.PI / 2;
+      peg.position.copy(FA).setX(x + Math.sign(x) * 0.05);
+      FE.add(peg);
+    }
     this.frontWheel = this.wheel();
     this.frontWheel.position.copy(FA);
     FE.add(this.frontWheel);
@@ -220,33 +233,45 @@ export class RiderRig {
   private _hip = V(0, 0, 0); private _sh = V(0, 0, 0); private _a = V(0, 0, 0); private _b = V(0, 0, 0);
   private _k = V(0, 0, 0); private _t = V(0, 0, 0); private _q = new Quaternion();
 
-  /** Pose the rider + bike parts. crouch 0..1, bar/whip angles in radians. */
-  pose(crouch: number, wheelAngle: number, barAngle = 0, whipAngle = 0) {
-    this.rearWheel.rotation.x = wheelAngle;
-    this.frontWheel.rotation.x = wheelAngle;
-    this.frontPivot.quaternion.copy(this.frontPivotBase).multiply(this._q.setFromAxisAngle(UPV, barAngle));
-    this.framePivot.quaternion.copy(this.framePivotBase).multiply(this._q.setFromAxisAngle(UPV, whipAngle));
+  /** Pose the rider + bike parts from blend weights (all 0..1) and part angles (rad). */
+  pose(p: PoseParams) {
+    this.rearWheel.rotation.x = p.wheelAngle;
+    this.frontWheel.rotation.x = p.wheelAngle;
+    this.frontPivot.quaternion.copy(this.frontPivotBase).multiply(this._q.setFromAxisAngle(UPV, -p.bar));
+    this.framePivot.quaternion.copy(this.framePivotBase).multiply(this._q.setFromAxisAngle(UPV, p.whip));
     this.framePivot.updateMatrix(); this.frameInner.updateMatrix();
     this.frontPivot.updateMatrix(); this.frontInner.updateMatrix();
 
-    const c = clamp(crouch, -0.2, 1);
+    const c = clamp(p.crouch, -0.2, 1);
     const hip = this._hip.set(0, 0.97 - 0.32 * c, -0.2 - 0.02 * c);
+    // tuck: hips up toward the bars; superman: body stretched out back, flat over the bike
+    hip.lerp(this._t.set(0, 1.0, -0.08), p.tuck * 0.7);
+    hip.lerp(this._t.set(0, 1.12, -0.5), p.superman);
+    hip.x += p.lean * 0.12;
     const sh = this._sh.copy(hip).add(this._t.set(0, 0.45 - 0.1 * c, 0.2 + 0.07 * c));
+    sh.lerp(this._a.copy(hip).add(this._t.set(0, 0.16, 0.5)), p.superman);
+    sh.lerp(this._a.copy(hip).add(this._t.set(0, 0.5, 0.06)), p.tuck);
     const L = this.limbs;
 
     for (let side = 0; side < 2; side++) {
       const s = side === 0 ? 1 : -1;
-      // legs
+      // ---- legs: pedals → (whip) floating → (superman) kicked back → (can-can) swung across
       const foot = this._a.set(0.14 * s, 0.335, side === 0 ? 0.115 : -0.235)
         .applyMatrix4(this.frameInner.matrix).applyMatrix4(this.framePivot.matrix);
+      foot.lerp(this._t.set(0.24 * s, hip.y - 0.62, hip.z + 0.22), p.feetOff);
+      foot.lerp(this._t.set(0.13 * s, hip.y - 0.05, hip.z - 0.78), p.superman);
+      if (side === 1) foot.lerp(this._t.set(0.55, 0.78, 0.22), p.cancan);
       this.feet[side].position.copy(foot).add(this._t.set(0, 0.01, 0.03));
       const hipS = this._b.copy(hip).add(this._t.set(0.1 * s, 0, 0));
-      solveIK(hipS, foot, 0.47, 0.46, this._t.set(0.15 * s, 0.1, 1), this._k);
+      const kneePole = this._t.set(0.15 * s, 0.1 + p.superman * 0.8, 1 - p.superman * 1.6);
+      solveIK(hipS, foot, 0.47, 0.46, kneePole, this._k);
       placeSeg(L[side === 0 ? 'thighL' : 'thighR'], hipS, this._k, 0.065);
       placeSeg(L[side === 0 ? 'shinL' : 'shinR'], this._k, foot, 0.048);
-      // arms
+      // ---- arms: grips → (barspin) let go → (tuck no-hander) thrown up and out
       const grip = this._a.set(0.34 * s, 1.05, 0.27)
         .applyMatrix4(this.frontInner.matrix).applyMatrix4(this.frontPivot.matrix);
+      grip.lerp(this._t.set(0.32 * s, sh.y - 0.2, sh.z + 0.22), p.handsOff);
+      grip.lerp(this._t.set(0.5 * s, sh.y + 0.32, sh.z - 0.05), p.tuck);
       this.hands[side].position.copy(grip);
       const shS = this._b.copy(sh).add(this._t.set(0.18 * s, -0.02, 0));
       solveIK(shS, grip, 0.3, 0.3, this._t.set(1.0 * s, -0.4, -0.6), this._k);
@@ -262,7 +287,7 @@ export class RiderRig {
     const neckTop = this._b.copy(sh).addScaledVector(td, 0.12).add(this._t.set(0, 0.02, 0.04));
     placeSeg(L.neck, sh, neckTop, 0.05);
     this.head.position.copy(neckTop).add(this._t.set(0, 0.11, 0.03));
-    this.head.rotation.x = 0.25 + 0.25 * c;
+    this.head.rotation.x = 0.25 + 0.25 * c + p.superman * 0.6;
   }
 
   /** Copy the controller's interpolated state onto the rig. */
@@ -276,11 +301,24 @@ export class RiderRig {
       return;
     }
     if (this.detached) this.reattach();
-    this.root.position.lerpVectors(r.prevPos, r.pos, alpha);
+    this.root.position.lerpVectors(r.prevPos, r.pos, alpha).add(r.visOffset);
     this.root.quaternion.slerpQuaternions(r.prevQuat, r.quat, alpha);
     let crouch = Math.max(r.compression, r.visComp);
     if (r.state === 'AIRBORNE') crouch = Math.max(crouch, 0.3 + 0.35 * clamp(Math.abs(r.flipVel) / 7, 0, 1));
-    this.pose(crouch, r.wheelAngle);
+    if (r.state === 'GRINDING') crouch = Math.max(crouch, 0.35);
+    if (r.state === 'MANUALING') crouch = Math.max(crouch, 0.15);
+    const P = this.params;
+    P.crouch = crouch;
+    P.wheelAngle = r.wheelAngle;
+    P.bar = r.barAngle;
+    P.whip = r.whipAngle;
+    P.tuck = r.varBlend.tuck;
+    P.superman = r.varBlend.superman;
+    P.cancan = r.varBlend.cancan;
+    P.feetOff = r.feetOff;
+    P.handsOff = r.handsOff;
+    P.lean = r.state === 'GRINDING' ? -r.balance : 0;
+    this.pose(P);
   }
 
   private detach() {

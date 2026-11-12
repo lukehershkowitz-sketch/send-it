@@ -17,9 +17,21 @@ All feel/score numbers live in `src/tuning.ts`.
 | `src/core/loop.ts` | fixed 120 Hz sim + interpolated render, timeScale (slow-mo) |
 | `src/core/input/` | action layer: keyboard + Gamepad API → `InputState`; bindings persist to localStorage |
 | `src/rider/RiderController.ts` | kinematic state + transitions, landing check, bail, landing prediction |
-| `src/rider/states/` | `Grounded`, `Airborne`, `Bailed` (Grinding / Manualing in Phase 2) |
+| `src/rider/states/` | `Grounded`, `Airborne`, `Grinding`, `Manualing`, `Bailed` |
 | `src/rider/RiderRig.ts` | low-poly bike (frame & front-end pivot on the steering axis for whips/barspins) + IK rider |
 | `src/world/` | `World` (collision raycasts w/ smooth normals), modular `pieces`, park JSON in `parks/` |
 | `src/camera/ChaseCam.ts` | lagging chase cam, speed pull-back, air FOV, free-look |
 | `src/ui/` | DOM HUD + debug overlay |
+| `src/tricks/scoring.ts` | trick naming, per-element points, repetition keys, multipliers |
+| `src/tricks/Combo.ts` | the current line: accumulate, link multiplier, bank on clean ride-away, lose on bail |
+| `src/tricks/Run.ts` | timed run, category totals, personal best per park (localStorage) |
 | `scripts/sim.ts` | headless ride tests |
+
+## Scoring
+- A line accumulates tricks (airs, grinds, manuals). It **banks** after you roll on the ground for
+  `score.linkWindow` s without starting another trick; a **bail loses** the whole line.
+- Line multiplier = 1 + 0.5 × (tricks in line − 1). Landing in a manual (hold B) or popping off a
+  grind keeps the line going.
+- Air multipliers: inverted (any flip) ×1.5, stomp ×1.25. Grabs count after 0.25 s and scale up to ×2 at 1 s.
+- Repetition: an element seen in 1/2/3 of your last 3 airs pays 75/55/40 %. Spin direction and fakie
+  take-offs are different keys, so switching them resets to full points.

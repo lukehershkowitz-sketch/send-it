@@ -10,6 +10,7 @@ export class Input {
   readonly values = {} as Record<Action, number>;
   private prev = {} as Record<Action, number>;
   private keys = new Set<string>();
+  private tapped = new Set<string>(); // pressed since last poll (catches sub-frame taps)
   readonly state: InputState = emptyInput();
   /** Free-look deltas this frame (radians-ish), plus whether free-look is held. */
   look = { dx: 0, dy: 0, active: false };
@@ -23,6 +24,7 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       if (PREVENT.has(e.code)) e.preventDefault();
       this.keys.add(e.code);
+      this.tapped.add(e.code);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -43,7 +45,7 @@ export class Input {
     for (const a of ACTIONS) {
       this.prev[a] = this.values[a];
       let v = 0;
-      for (const code of this.bindings.keys[a]) if (this.keys.has(code)) v = 1;
+      for (const code of this.bindings.keys[a]) if (this.keys.has(code) || this.tapped.has(code)) v = 1;
       if (pad) {
         for (const b of this.bindings.pad[a]) {
           let pv = 0;
@@ -61,6 +63,7 @@ export class Input {
       this.values[a] = v;
     }
 
+    this.tapped.clear();
     const s = this.state, val = this.values;
     s.steer = val.steerRight - val.steerLeft;
     s.pedal = val.pedal;

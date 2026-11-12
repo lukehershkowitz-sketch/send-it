@@ -17,7 +17,8 @@ export type PieceDef =
       height: number; slope: number; width: number; deck?: number; faceAngle?: number;
       knuckleRadius?: number; transitionRadius?: number;
     }
-  | { type: 'rail'; pos: [number, number, number]; yaw?: number; length: number; height: number };
+  | { type: 'rail'; pos: [number, number, number]; yaw?: number; length: number; height: number }
+  | { type: 'ledge'; pos: [number, number, number]; yaw?: number; length: number; height: number; width: number };
 
 export interface BuiltPart { mesh: Mesh; collide: ColliderKind | null }
 export interface BuiltPiece { parts: BuiltPart[]; lips: Lip[]; rails?: RailSeg[] }
@@ -28,6 +29,8 @@ const mats = {
   metal: new MeshLambertMaterial({ color: 0xc9d1d8 }),
   post: new MeshLambertMaterial({ color: 0x4b545c }),
   ground: new MeshLambertMaterial({ color: 0x8fa36a }),
+  concrete: new MeshLambertMaterial({ color: 0xb8b4aa }),
+  coping: new MeshLambertMaterial({ color: 0x8d949a }),
 };
 /** Decor code swaps in a textured ground material in the browser. */
 export const pieceMaterials: Record<string, Material> = mats;
@@ -93,6 +96,18 @@ export function buildPiece(def: PieceDef): BuiltPiece {
         ],
         lips: [],
       };
+    }
+    case 'ledge': {
+      const { length: L, height: H, width: W } = def;
+      const box = new BoxGeometry(W, H, L).translate(0, H / 2, L / 2);
+      const parts = [part(box, mats.concrete, 'surface')];
+      const rails = [];
+      for (const x of [W / 2, -W / 2]) {
+        const edge = new BoxGeometry(0.05, 0.04, L).translate(x, H - 0.015, L / 2);
+        parts.push(part(edge, mats.coping, null));
+        rails.push({ a: new Vector3(x, H - 0.02, 0), b: new Vector3(x, H - 0.02, L), radius: 0.02 });
+      }
+      return { parts, lips: [], rails };
     }
     case 'rail': {
       const r = 0.05, L = def.length, H = def.height;

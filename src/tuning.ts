@@ -69,6 +69,14 @@ export const TUNING = {
     flipSnapWindow: 35,
     flipSnapRate: 4,
     latchPedalAtTakeoff: true, // W held through the lip doesn't start a frontflip until re-pressed
+    whipRate: 760,             // °/s tailwhip
+    barRate: 900,              // °/s barspin
+    flairSpinRatio: 0.5,       // flair button: spin speed as a fraction of flip speed (360 flip ↔ 180 spin)
+    catchWindow: 80,           // releasing a whip/barspin within this many ° of a full turn auto-catches it…
+    catchRate: 16,             // …this fast. Outside the window it stops where it is (= bail if you land)
+    completeWithin: 20,        // a whip/barspin counts as done once it's this close to the full turn
+    variationBlendIn: 9,       // how fast the rider moves into a grab/variation pose
+    variationBlendOut: 7,      // …and back out of it (must be mostly out before landing)
     airDrag: 0.0015,
   },
 
@@ -78,6 +86,9 @@ export const TUNING = {
     stompYaw: 8,               // inside these = STOMPED
     stompPitch: 8,
     requireInputsReleased: true,
+    whipTolerance: 25,         // frame must be within this many ° of straight
+    barTolerance: 30,          // bars must be within this many ° of centre
+    variationMaxBlend: 0.35,   // rider must be at least this far back from a grab pose
     smallAirTime: 0.3,         // airs shorter than this get extra tolerance (rolling off small drops)
     smallAirToleranceScale: 1.8,
     maxImpactSpeed: 17,        // m/s into the surface; harder than this = bail even if aligned
@@ -86,6 +97,68 @@ export const TUNING = {
     cleanSpeedKeep: 0.93,      // speed kept on a clean landing
     stompSpeedKeep: 1.0,       // speed kept on a stomp
     minAirTime: 0.04,
+  },
+
+  grind: {
+    snapRadius: 0.34,          // pegs within this of a rail (coming down onto it) = lock on
+    maxEntryAngle: 55,         // ° between travel and rail; steeper = clip it and bail
+    friction: 0.7,             // m/s² lost while grinding
+    gravityScale: 0.6,         // slope gravity on sloped rails
+    minSpeed: 0.8,             // slower than this and you fall off the end
+    doublePegAngle: 14,        // |bike yaw vs rail| under this = double peg, else feeble/smith
+    icepickPitch: 20,          // nose-up ° at entry for an icepick
+    feebleSmithYaw: 26,        // visual yaw of the bike in feeble/smith
+    icepickNoseUp: 34,
+    popScale: 0.85,            // pop strength off a rail (× normal pop)
+    balanceInstability: 2.2,   // how fast an off-centre balance falls further (grows with time)
+    instabilityGrowth: 0.5,
+    balanceNoise: 1.8,         // random wobble
+    balanceControl: 5.5,       // how hard A/D push the balance
+    balanceDamping: 1.6,
+  },
+
+  manual: {
+    minSpeed: 1.5,
+    pitch: 22,                 // ° nose up in a manual (nose-down for nose manuals)
+    nosePitch: 16,
+    pitchPerBalance: 12,       // extra ° from the balance needle
+    steerScale: 0.6,
+    friction: 0.35,            // extra m/s² drag while manualling
+    balanceInstability: 1.8,
+    instabilityGrowth: 0.35,
+    balanceNoise: 1.0,
+    balanceControl: 4.5,       // W/S push the balance
+    balanceDamping: 1.6,
+  },
+
+  score: {
+    spinPer180: 150,
+    flipPer360: 500,
+    flairBonus: 300,           // on top of the backflip + 180 it contains
+    whipPer360: 350,
+    barPer360: 250,
+    airtimePerSec: 120,
+    minAirForAirtime: 0.5,
+    variations: { tuck: 250, superman: 400, cancan: 300 },
+    varMinHold: 0.25,          // grabs count after this hold…
+    varMaxHold: 1.0,           // …and their bonus scales up to here
+    varMaxMult: 2.0,           // bonus at max hold
+    invertedMult: 1.5,         // any flip
+    stompMult: 1.25,           // stomped landing (extra goes to the Stomps category)
+    grindBase: { 'DOUBLE PEG': 100, FEEBLE: 150, SMITH: 150, ICEPICK: 200 } as Record<string, number>,
+    grindPerSec: 200,
+    manualBase: 75,
+    manualPerSec: 160,
+    minManualTime: 0.4,
+    linkStep: 0.5,             // line multiplier = 1 + linkStep × (tricks in line − 1)
+    linkWindow: 0.9,           // seconds you can roll on the ground before the line banks
+    repetition: [1, 0.75, 0.55, 0.4], // pay-out for a trick seen in 0/1/2/3 of the last airs
+    repetitionMemory: 3,
+    varietyPerKind: 75,        // bank bonus per distinct trick in the line beyond the 2nd
+  },
+
+  run: {
+    duration: 120,             // seconds per run
   },
 
   bail: {

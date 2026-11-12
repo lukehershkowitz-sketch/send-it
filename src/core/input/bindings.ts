@@ -17,7 +17,7 @@ export const DEFAULT_BINDINGS: Bindings = {
     tailwhip: ['ArrowDown'], flair: ['ArrowUp'],
     tuck: ['ShiftLeft', 'ShiftRight'], superman: ['KeyQ'], cancan: ['KeyE'], manual: ['KeyB'],
     freeLook: [], restart: ['KeyR'], pause: ['Escape', 'KeyP'],
-    debug: ['Backquote', 'F3'], help: ['KeyH'], camera: ['KeyC'],
+    debug: ['Backquote', 'F3'], help: ['KeyH'], camera: ['KeyC'], endRun: ['Enter'],
   },
   pad: {
     steerLeft: [{ axis: 0, dir: -1 }], steerRight: [{ axis: 0, dir: 1 }],
@@ -26,7 +26,7 @@ export const DEFAULT_BINDINGS: Bindings = {
     tailwhip: [{ axis: 3, dir: 1 }], flair: [{ button: 1 }],
     tuck: [{ button: 4 }], superman: [{ button: 2 }], cancan: [{ button: 3 }], manual: [{ button: 10 }],
     freeLook: [{ button: 11 }], restart: [{ button: 8 }], pause: [{ button: 9 }],
-    debug: [], help: [], camera: [{ button: 12 }],
+    debug: [], help: [], camera: [{ button: 12 }], endRun: [{ button: 13 }],
   },
 };
 

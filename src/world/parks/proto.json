@@ -5,6 +5,7 @@
     { "type": "ground", "pos": [0, 0, 0], "size": 600 },
     { "type": "kicker", "pos": [0, 0, 0], "height": 2.2, "angle": 36, "width": 3.4 },
     { "type": "landing", "pos": [0, 0, 8.5], "height": 2.3, "slope": 28, "width": 5.5, "deck": 0.3, "knuckleRadius": 2, "transitionRadius": 5 },
-    { "type": "rail", "pos": [7, 0, -14], "length": 7, "height": 0.45 }
+    { "type": "rail", "pos": [7, 0, -14], "length": 7, "height": 0.45 },
+    { "type": "ledge", "pos": [-7, 0, -22], "length": 9, "height": 0.42, "width": 0.7 }
   ]
 }

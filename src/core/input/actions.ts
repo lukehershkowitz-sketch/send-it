@@ -2,7 +2,7 @@ export const ACTIONS = [
   'steerLeft', 'steerRight', 'pedal', 'brake', 'pop',
   'barspinLeft', 'barspinRight', 'tailwhip', 'flair',
   'tuck', 'superman', 'cancan', 'manual',
-  'freeLook', 'restart', 'pause', 'debug', 'help', 'camera',
+  'freeLook', 'restart', 'pause', 'debug', 'help', 'camera', 'endRun',
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 

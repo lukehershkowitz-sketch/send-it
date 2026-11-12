@@ -9,6 +9,14 @@ const _a = new Vector3(), _t = new Vector3(), _np = new Vector3(), _o = new Vect
 const _f = new Vector3(), _rel = new Vector3(), _ql = new Quaternion();
 const FWD = new Vector3(0, 0, 1);
 
+export interface RideMode {
+  pedal: boolean;      // W pedals (off in manuals: W/S balance instead)
+  brake: boolean;
+  steerScale: number;
+  extraDrag: number;   // m/s²
+}
+const FULL: RideMode = { pedal: true, brake: true, steerScale: 1, extraDrag: 0 };
+
 export const Grounded = {
   name: 'GROUNDED' as const,
 
@@ -17,10 +25,30 @@ export const Grounded = {
   },
 
   update(r: RiderController, dt: number, input: InputState) {
+    // B = manual, B + S = nose manual
+    if (input.manual && !r.manualWasHeld && r.speed > TUNING.manual.minSpeed) {
+      r.manualNose = input.brake > 0.3;
+      r.setState('MANUALING');
+      return;
+    }
+    rideStep(r, dt, input, FULL);
+  },
+
+  /** Build the bike's orientation from heading + surface normal, plus lean. */
+  orient(r: RiderController, lean: number) {
+    projectOnPlane(dirFromYaw(r.visualYaw(), _a), r.normal, _f);
+    if (_f.lengthSq() < 1e-6) _f.set(0, 0, 1);
+    quatFromForwardUp(_f.normalize(), r.normal, r.quat);
+    r.quat.multiply(_ql.setFromAxisAngle(FWD, lean));
+  },
+} satisfies RiderState & { orient(r: RiderController, lean: number): void };
+
+/** One step of riding on a surface (shared by GROUNDED and MANUALING). Returns false if the state changed. */
+export function rideStep(r: RiderController, dt: number, input: InputState, mode: RideMode): boolean {
     const P = TUNING.physics, R = TUNING.ride, POP = TUNING.pop;
 
     // ---------------------------------------------------------------- steering / carve
-    r.steer = damp(r.steer, input.steer, R.steerResponse, dt);
+    r.steer = damp(r.steer, input.steer * mode.steerScale, R.steerResponse, dt);
     const sf = clamp(r.speed / R.maxPedalSpeed, 0, 1);
     const turnRate = lerp(R.turnRateSlow, R.turnRateFast, sf) * DEG;
     r.heading = wrapAngle(r.heading - r.steer * turnRate * dt); // right = clockwise = -yaw
@@ -37,7 +65,7 @@ export const Grounded = {
     const dPitch = pitchNow - r.prevGroundPitch;
     r.prevGroundPitch = pitchNow;
 
-    if (input.pedal > 0.05) {
+    if (mode.pedal && input.pedal > 0.05) {
       if (r.fakie) {
         if (r.speed < R.fakieTurnSpeed) r.fakie = false; // pivot back to forward
       } else {
@@ -46,8 +74,8 @@ export const Grounded = {
         if (dPitch > 0) r.speed += R.pumpGain * dPitch * input.pedal; // pumping a transition
       }
     }
-    if (input.brake > 0.05) r.speed = Math.max(0, r.speed - R.brakeDecel * input.brake * dt);
-    if (r.speed > 0) r.speed = Math.max(0, r.speed - (R.rollingResistance + R.airDrag * r.speed * r.speed) * dt);
+    if (mode.brake && input.brake > 0.05) r.speed = Math.max(0, r.speed - R.brakeDecel * input.brake * dt);
+    if (r.speed > 0) r.speed = Math.max(0, r.speed - (R.rollingResistance + mode.extraDrag + R.airDrag * r.speed * r.speed) * dt);
     r.speed = Math.min(r.speed, R.maxSpeed);
     if (r.speed < 0) {
       // rolled backwards (stalled on a ramp) → now riding fakie
@@ -65,7 +93,7 @@ export const Grounded = {
     r.popWasHeld = input.pop;
     if (released && r.compression >= POP.minCompression) {
       doPop(r, tDir, popTiming(r));
-      return;
+      return false;
     }
     if (!input.pop) r.compression = Math.max(0, r.compression - dt / 0.08);
 
@@ -78,7 +106,7 @@ export const Grounded = {
         if (wall && (wall.kind === 'obstacle' || wall.normal.dot(r.normal) < Math.cos(P.maxSlopeChangeDeg * DEG))) {
           if (r.speed > P.wallCrashSpeed) {
             r.bail(wall.kind === 'obstacle' ? 'Rode into the rail' : 'Hit a wall');
-            return;
+            return false;
           }
           r.speed = 0;
           break;
@@ -95,11 +123,11 @@ export const Grounded = {
     if (!hit) {
       r.pos.copy(_np);
       r.takeoff(false); // rolled off an edge / lip
-      return;
+      return false;
     }
     const change = hit.normal.angleTo(r.normal);
     if (change > P.maxSlopeChangeDeg * DEG || hit.normal.y < P.minGroundNormalY) {
-      if (r.speed > P.wallCrashSpeed) { r.bail('Hit a wall'); return; }
+      if (r.speed > P.wallCrashSpeed) { r.bail('Hit a wall'); return false; }
       r.speed = 0;
     } else {
       // convex crest: if the ground drops away faster than gravity can pull us down, go light
@@ -107,14 +135,14 @@ export const Grounded = {
       if (drop > 0.002 && (2 * drop) / (dt * dt) > P.gravity * r.normal.y * P.convexStick) {
         r.pos.copy(_np);
         r.takeoff(false);
-        return;
+        return false;
       }
       r.pos.copy(hit.point);
       r.normal.copy(hit.normal);
     }
 
     if (r.bikeTouchesRail(r.quat)) {
-      if (r.speed > P.wallCrashSpeed) { r.bail('Rode into the rail'); return; }
+      if (r.speed > P.wallCrashSpeed) { r.bail('Rode into the rail'); return false; }
       r.pos.copy(r.prevPos);
       r.speed = 0;
     }
@@ -125,16 +153,8 @@ export const Grounded = {
     r.lean = damp(r.lean, r.steer * sf * R.maxLeanDeg * DEG, 8, dt);
     r.wheelAngle += (r.speed / 0.255) * dt * (r.fakie ? -1 : 1);
     Grounded.orient(r, r.lean);
-  },
-
-  /** Build the bike's orientation from heading + surface normal, plus lean. */
-  orient(r: RiderController, lean: number) {
-    projectOnPlane(dirFromYaw(r.visualYaw(), _a), r.normal, _f);
-    if (_f.lengthSq() < 1e-6) _f.set(0, 0, 1);
-    quatFromForwardUp(_f.normalize(), r.normal, r.quat);
-    r.quat.multiply(_ql.setFromAxisAngle(FWD, lean));
-  },
-} satisfies RiderState & { orient(r: RiderController, lean: number): void };
+  return true;
+}
 
 function travelDir(r: RiderController, out: Vector3): Vector3 {
   projectOnPlane(dirFromYaw(r.travelYaw, _a), r.normal, out);

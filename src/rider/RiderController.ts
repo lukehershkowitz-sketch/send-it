@@ -4,10 +4,17 @@ import type { Emitter } from '../core/events';
 import { type InputState, emptyInput } from '../core/input/actions';
 import { DEG, UP, clamp, projectOnPlane, quatFromYawPitch, wrapAngle, yawOf } from '../core/math';
 import type { World } from '../world/World';
-import type { DebrisBody, LandingCheck, LandingResult, PopInfo, RiderEvents, RiderState, StateName } from './types';
+import {
+  VARIATIONS, type AirData, type DebrisBody, type GrindType, type LandingCheck, type LandingResult, type PopInfo,
+  type RiderEvents, type RiderState, type StateName, type Variation,
+} from './types';
+import type { RailSeg } from '../world/World';
+import { describeAir } from '../tricks/scoring';
 import { Grounded } from './states/Grounded';
 import { Airborne } from './states/Airborne';
 import { Bailed } from './states/Bailed';
+import { Grinding } from './states/Grinding';
+import { Manualing } from './states/Manualing';
 
 const FWD = new Vector3(0, 0, 1);
 const _f = new Vector3(), _u = new Vector3(), _vt = new Vector3(), _fp = new Vector3(), _q = new Quaternion();
@@ -22,6 +29,8 @@ export class RiderController {
     GROUNDED: Grounded,
     AIRBORNE: Airborne,
     BAILED: Bailed,
+    GRINDING: Grinding,
+    MANUALING: Manualing,
   };
   current: RiderState = Grounded;
   get state(): StateName { return this.current.name; }
@@ -63,6 +72,49 @@ export class RiderController {
   predictCounter = 0;
   takeoffFakie = false;
   pedalLatched = false;
+  fromGrind = false;
+  // whips / barspins / flair / variations
+  whipAngle = 0;    // frame rotation around the steering axis (rad)
+  whipVel = 0;
+  barAngle = 0;     // bar rotation (rad, + = right)
+  barVel = 0;
+  barDir = 1;
+  whipsDone = 0;
+  barsDone = 0;
+  chain: AirData['chain'] = [];
+  flairActive = false;
+  flairDir = 1;
+  lastSpinDir = 1;
+  varBlend: Record<Variation, number> = { tuck: 0, superman: 0, cancan: 0 };
+  varHold: Record<Variation, number> = { tuck: 0, superman: 0, cancan: 0 };
+  varBest: Record<Variation, number> = { tuck: 0, superman: 0, cancan: 0 };
+  feetOff = 0;      // visual: feet off the pedals (whips)
+  handsOff = 0;     // visual: hands off the bars (barspins)
+
+  // --- balance (grinds + manuals): -1..1, |b| ≥ 1 = bail
+  balance = 0;
+  balanceVel = 0;
+  balanceDrift = 0;
+
+  // --- grind
+  rail: RailSeg | null = null;
+  ignoreRail: RailSeg | null = null; // the rail we just left (no re-lock / clip for a moment)
+  ignoreRailTime = 0;
+  railT = 0;
+  railSign = 1;
+  grindType: GrindType = 'DOUBLE PEG';
+  grindTime = 0;
+  grindYaw = 0;     // visual yaw offset for the grind type
+  grindFakie = false;
+  grindSide = 1;    // which side of the rail the bike rides on (+1 = right of travel)
+
+  // --- manual
+  manualNose = false;
+  manualTime = 0;
+  manualWasHeld = false;
+  manualBrakeLatched = false;
+  /** Visual-only root offset (manual pivots around a wheel). */
+  visOffset = new Vector3();
 
   // --- visuals (read by the rig)
   quat = new Quaternion();
@@ -100,6 +152,15 @@ export class RiderController {
     this.stateTime += dt;
     this.current.update(this, dt, input);
 
+    if (this.state !== 'AIRBORNE') {
+      for (const v of VARIATIONS) this.varBlend[v] = Math.max(0, this.varBlend[v] - dt * 6);
+      this.feetOff = Math.max(0, this.feetOff - dt * 6);
+      this.handsOff = Math.max(0, this.handsOff - dt * 6);
+    }
+    if (this.state !== 'MANUALING') this.visOffset.set(0, 0, 0);
+    this.ignoreRailTime = Math.max(0, this.ignoreRailTime - dt);
+    this.manualWasHeld = input.manual;
+
     // suspension / body spring (visual only)
     this.visCompVel += (-140 * this.visComp - 16 * this.visCompVel) * dt;
     this.visComp = clamp(this.visComp + this.visCompVel * dt, -0.2, 1);
@@ -124,6 +185,12 @@ export class RiderController {
     this.spinVel = this.flipVel = 0;
     this.visComp = this.visCompVel = 0;
     this.lean = 0;
+    this.resetTricks();
+    for (const v of VARIATIONS) this.varBlend[v] = 0;
+    this.feetOff = this.handsOff = 0;
+    this.balance = this.balanceVel = 0;
+    this.visOffset.set(0, 0, 0);
+    this.rail = null;
     this.current = Grounded;
     this.stateTime = 0;
     Grounded.enter(this);
@@ -148,6 +215,8 @@ export class RiderController {
     this.spinVel = this.flipVel = 0;
     this.airTime = 0;
     this.takeoffFakie = this.fakie;
+    this.fromGrind = this.state === 'GRINDING';
+    this.resetTricks();
     this.takeoffNormal.copy(this.normal);
     this.pedalLatched = TUNING.air.latchPedalAtTakeoff && this.input.pedal > 0.2;
     if (!popped && this.input.pop && this.compression >= TUNING.pop.minCompression) {
@@ -156,6 +225,30 @@ export class RiderController {
     } else this.lateTimer = 0;
     this.setState('AIRBORNE');
     this.events.emit('takeoff', { popped });
+  }
+
+  resetTricks(): void {
+    this.whipAngle = this.whipVel = this.barAngle = this.barVel = 0;
+    this.whipsDone = this.barsDone = 0;
+    this.chain = [];
+    this.flairActive = false;
+    for (const v of VARIATIONS) { this.varHold[v] = 0; this.varBest[v] = 0; }
+  }
+
+  /** Snapshot of the current air, for naming/scoring. */
+  airData(): AirData {
+    const variations: AirData['variations'] = {};
+    for (const v of VARIATIONS) if (this.varBest[v] > 0) variations[v] = this.varBest[v];
+    return {
+      airTime: this.airTime,
+      spinDeg: this.spinAngle / DEG,
+      flipDeg: this.flipAngle / DEG,
+      chain: [...this.chain],
+      barDir: this.barDir,
+      variations,
+      takeoffFakie: this.takeoffFakie,
+      fromGrind: this.fromGrind,
+    };
   }
 
   /** Ground orientation ignoring lean (used for takeoff). */
@@ -188,8 +281,8 @@ export class RiderController {
       _ps.copy(v).multiplyScalar(dtp);
       _ps.y -= 0.5 * g * dtp * dtp;
       const len = _ps.length();
-      const hit = len > 0 ? this.world.raycast(p, _pd.copy(_ps).divideScalar(len), len) : null;
-      if (hit && (t > 0 || hit.distance > 0.05)) {
+      const hit = len > 0 ? this.world.raycast(p, _pd.copy(_ps).divideScalar(len), len, ['surface']) : null;
+      if (hit && hit.normal.dot(_pd) < 0) { // only surfaces we're moving into (not the one we just left)
         pr.valid = true;
         pr.point.copy(hit.point);
         pr.normal.copy(hit.normal);
@@ -199,6 +292,8 @@ export class RiderController {
       p.add(_ps);
       v.y -= g * dtp;
     }
+    // nothing found: keep a recent close prediction rather than dropping the landing alignment
+    if (pr.valid && pr.time < 0.3) return;
     pr.valid = false;
     pr.time = 99;
   }
@@ -226,6 +321,9 @@ export class RiderController {
     const pitchErr = Math.asin(clamp(Math.abs(_f.dot(n)), 0, 1)) / DEG;
     const inverted = _u.dot(n) < 0.2;
     const holding = L.requireInputsReleased && this.trickInputHeld(input);
+    const whipErr = angleToTurn(this.whipAngle) / DEG;
+    const barErr = angleToTurn(this.barAngle) / DEG;
+    const variation = Math.max(...VARIATIONS.map((v) => this.varBlend[v]));
     const impact = Math.max(0, -this.vel.dot(n));
     const scale = this.airTime < L.smallAirTime ? L.smallAirToleranceScale : 1;
     const yawTol = L.yawTolerance * scale, pitchTol = L.pitchTolerance * scale;
@@ -236,12 +334,15 @@ export class RiderController {
     if (facesUs && (inverted || pitchErr > pitchTol || impact > L.casedImpact)) reason = 'Cased it — needs more speed or pop';
     else if (inverted) reason = 'Landed upside down';
     else if (holding) reason = 'Still holding the trick';
+    else if (whipErr > L.whipTolerance) reason = 'Frame not caught — tailwhip unfinished';
+    else if (barErr > L.barTolerance) reason = 'Bars not caught — barspin unfinished';
+    else if (variation > L.variationMaxBlend) reason = 'Still in the grab — let go sooner';
     else if (pitchErr > pitchTol) reason = this.noseOrTail(n);
     else if (yawErr > yawTol) reason = 'Landed sideways';
     else if (impact > L.maxImpactSpeed) reason = 'Too hard — flat landing';
     const ok = reason === '';
     const stomped = ok && yawErr <= L.stompYaw && pitchErr <= L.stompPitch;
-    return { yawErr, pitchErr, fakie, inverted, holding, impact, yawTol, pitchTol, ok, stomped, reason };
+    return { yawErr, pitchErr, whipErr, barErr, variation, fakie, inverted, holding, impact, yawTol, pitchTol, ok, stomped, reason };
   }
 
   private noseOrTail(n: Vector3): string {
@@ -255,7 +356,9 @@ export class RiderController {
     return (
       Math.abs(input.steer) > 0.2 ||
       (input.pedal > 0.2 && !this.pedalLatched) ||
-      input.brake > 0.2
+      input.brake > 0.2 ||
+      Math.abs(input.barspin) > 0.2 ||
+      input.tailwhip || input.flair || input.tuck || input.superman || input.cancan
     );
   }
 
@@ -284,32 +387,29 @@ export class RiderController {
     _u.copy(UP).applyQuaternion(q);
     _pp.copy(this.pos).addScaledVector(_u, C.bikeCapsuleHeight).addScaledVector(_f, -0.45);
     _pv.copy(this.pos).addScaledVector(_u, C.bikeCapsuleHeight).addScaledVector(_f, 0.45);
-    return !!this.world.railNear(_pp, _pv, C.bikeCapsuleRadius);
+    const rail = this.world.railNear(_pp, _pv, C.bikeCapsuleRadius);
+    return !!rail && !(rail === this.ignoreRail && this.ignoreRailTime > 0);
   }
 
-  /** Name the air for HUD feedback (Phase 2 replaces this with the full trick system). */
+  /** Live name of the current air (HUD). */
   describeAir(): string {
-    const spin = Math.round(Math.abs(this.spinAngle) / Math.PI) * 180;
-    const flips = Math.round(this.flipAngle / (2 * Math.PI));
-    const parts: string[] = [];
-    if (this.takeoffFakie) parts.push('FAKIE');
-    if (spin >= 180) parts.push(String(spin));
-    if (flips !== 0) {
-      const n = Math.abs(flips);
-      parts.push(`${n === 2 ? 'DOUBLE ' : n === 3 ? 'TRIPLE ' : n > 3 ? n + 'x ' : ''}${flips > 0 ? 'BACKFLIP' : 'FRONTFLIP'}`);
-    }
-    if (parts.length === 0 || (parts.length === 1 && parts[0] === 'FAKIE')) parts.push(this.airTime > 0.5 ? 'AIR' : 'HOP');
-    return parts.join(' ');
+    return describeAir(this.airData(), true);
   }
 
   /** Signed yaw of the current motion (used by the camera). */
   motionYaw(): number {
-    if (this.state === 'GROUNDED') return this.travelYaw;
+    if (this.state === 'GROUNDED' || this.state === 'MANUALING') return this.travelYaw;
     const h = Math.hypot(this.vel.x, this.vel.z);
     return h > 0.5 ? Math.atan2(this.vel.x, this.vel.z) : this.travelYaw;
   }
 
   visualYaw(): number { return wrapAngle(this.heading + this.fakieVis + this.yawVisOffset); }
+}
+
+/** Distance (rad) from an angle to the nearest whole turn. */
+export function angleToTurn(a: number): number {
+  const r = Math.abs(a) % (2 * Math.PI);
+  return Math.min(r, 2 * Math.PI - r);
 }
 
 function makeBody(radius: number): DebrisBody {

@@ -46,7 +46,7 @@ export function quatFromYawPitch(yaw: number, pitch: number, out: Quaternion): Q
 
 const _d1 = new Vector3(), _d2 = new Vector3(), _r = new Vector3(), _c1 = new Vector3(), _c2 = new Vector3();
 /** Closest distance between segments p1-q1 and p2-q2. Optionally returns the param t on segment 2. */
-export function segSegDistance(p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector3, out?: { t: number }): number {
+export function segSegDistance(p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector3, out?: { s: number; t: number }): number {
   _d1.subVectors(q1, p1); _d2.subVectors(q2, p2); _r.subVectors(p1, p2);
   const a = _d1.dot(_d1), e = _d2.dot(_d2), f = _d2.dot(_r);
   let s = 0, t = 0;
@@ -63,7 +63,7 @@ export function segSegDistance(p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector
       else if (t > 1) { t = 1; s = clamp((b - c) / a, 0, 1); }
     }
   }
-  if (out) out.t = t;
+  if (out) { out.s = s; out.t = t; }
   _c1.copy(p1).addScaledVector(_d1, s);
   _c2.copy(p2).addScaledVector(_d2, t);
   return _c1.distanceTo(_c2);
