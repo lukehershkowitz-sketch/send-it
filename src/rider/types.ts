@@ -17,6 +17,10 @@ export interface PopInfo { label: PopLabel; factor: number; strength: number }
 export interface LandingCheck {
   yawErr: number;      // degrees from nearest of forward/fakie
   pitchErr: number;    // degrees between wheels and surface
+  rollErr: number;     // degrees the bike is leaned over sideways relative to the surface
+  rollTol: number;
+  severity: number;    // worst error as a fraction of its tolerance (0 = perfect, 1 = at the limit)
+  wheelFirst: 'front' | 'rear' | 'both';
   whipErr: number;     // degrees the frame is away from straight
   barErr: number;      // degrees the bars are away from centre
   variation: number;   // 0..1 how far into a grab pose the rider still is
@@ -39,6 +43,10 @@ export interface AirData {
   airTime: number;
   spinDeg: number;          // signed (+ = left / counter-clockwise from above)
   flipDeg: number;          // signed (+ = backflip)
+  rollDeg: number;          // signed (+ = right side down)
+  maxTiltDeg: number;       // how far the bike tipped from level at its most
+  maxRollDeg: number;       // largest sideways lean
+  tableTime: number;        // seconds spent laid over past the tabletop angle
   chain: ('WHIP' | 'BAR')[]; // completed whips/barspins in order
   barDir: number;           // +1 right, -1 left (last barspin direction)
   variations: Partial<Record<Variation, number>>; // longest hold (s) per variation

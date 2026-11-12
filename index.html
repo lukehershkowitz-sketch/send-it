@@ -173,6 +173,7 @@
     #touch .b1 { right: 100px; bottom: 6px; } #touch .b2 { right: 6px; bottom: 100px; } #touch .b5 { right: 92px; bottom: 92px; }
     #touch .b3 { right: 168px; bottom: 6px; } #touch .b4 { right: 6px; bottom: 168px; }
     #touch .g1 { right: 168px; bottom: 74px; width: 50px; height: 50px; } #touch .g2 { right: 152px; bottom: 140px; width: 50px; height: 50px; } #touch .g3 { right: 74px; bottom: 168px; width: 50px; height: 50px; }
+    #touch .g4 { right: 8px; bottom: 236px; width: 50px; height: 50px; } #touch .g5 { right: 70px; bottom: 236px; width: 50px; height: 50px; }
     #touch .pause { top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 44px; height: 44px; font-size: 14px; }
     body.touch #help-hint { display: none; }
     .touch-only { display: none; }
@@ -210,17 +211,21 @@
   <div id="help" class="hidden">
     <h3>CONTROLS <span style="opacity:.6">(H to close)</span></h3>
     <kbd>W</kbd> pedal · <kbd>S</kbd> brake · <kbd>A</kbd><kbd>D</kbd> steer<br>
-    <kbd>Space</kbd> hold to load, release at the lip to pop<br>
-    In air: <kbd>A</kbd><kbd>D</kbd> spin · <kbd>S</kbd> backflip · <kbd>W</kbd> frontflip · <kbd>↑</kbd> flair<br>
-    <kbd>↓</kbd> tailwhip · <kbd>←</kbd><kbd>→</kbd> barspin · <kbd>Shift</kbd> tuck · <kbd>Q</kbd> superman · <kbd>E</kbd> can-can<br>
-    Let go of everything before you land!<br>
+    <b>Jumping:</b> hold <kbd>Space</kbd> to preload, release <i>just before</i> the lip: the push takes about a tenth of a second, so the ramp gives the height and your timing adds the rest.<br>
+    While loaded, <kbd>W</kbd><kbd>S</kbd><kbd>A</kbd><kbd>D</kbd> shift your weight and change how you leave the ramp.<br>
+    <b>In the air everything has momentum</b> (let go and you keep rotating; steer the other way to stop):<br>
+    <kbd>A</kbd><kbd>D</kbd> flat spin · <kbd>S</kbd> backflip · <kbd>W</kbd> frontflip · <kbd>Shift</kbd>+<kbd>A</kbd><kbd>D</kbd> roll · <kbd>T</kbd> tabletop<br>
+    <kbd>↑</kbd> flair · <kbd>↑</kbd>+<kbd>A</kbd><kbd>D</kbd> cork · <kbd>↑</kbd>+<kbd>A</kbd><kbd>D</kbd>+<kbd>S</kbd> rodeo · <kbd>↑</kbd>+<kbd>A</kbd><kbd>D</kbd>+<kbd>W</kbd> misty<br>
+    <kbd>F</kbd> tuck (spin faster) · hold <kbd>Space</kbd> in the air to spread out (slows rotation)<br>
+    <kbd>↓</kbd> tailwhip · <kbd>←</kbd><kbd>→</kbd> barspin · <kbd>Q</kbd> superman · <kbd>E</kbd> can-can<br>
+    Let go of the keys before you land. The bike gets a light nudge toward the landing (Settings → landing assist).<br>
     Hop onto the rail/ledge to grind (<kbd>A</kbd><kbd>D</kbd> balance, <kbd>Space</kbd> pop off) · hold <kbd>S</kbd> to icepick<br>
     <kbd>B</kbd> manual · <kbd>B</kbd>+<kbd>S</kbd> nose manual (<kbd>W</kbd><kbd>S</kbd> balance) · hold <kbd>B</kbd> landing to link<br>
     Line banks when you ride away clean · bail = line lost<br>
     Quarters &amp; vert: ride up, air out, <kbd>A</kbd><kbd>D</kbd> turns you in the wall (180 to come back forwards)<br>
     <kbd>R</kbd> hold: new run · <kbd>Enter</kbd> end run · <kbd>Esc</kbd> pause (Watch replay) · <kbd>`</kbd> debug<br>
     Replay: <kbd>C</kbd> camera (follow / orbit / fixed) · <kbd>Space</kbd> pause · <kbd>A</kbd><kbd>D</kbd> scrub · <kbd>S</kbd> slow-mo<br>
-    Pad: LS steer/spin · RT/LT pedal/brake/flips · A pop · B flair · RS bars/whip · LB tuck · X/Y superman/can-can · L3 manual
+    Pad: LS steer/spin · RT/LT pedal/brake/flips · A pop · B flair/cork · LB roll · RB tuck · D-pad ← tabletop · RS bars/whip · X/Y superman/can-can · L3 manual
     <div class="note" id="pad-note"></div>
   </div>
   <div id="vignette"></div>

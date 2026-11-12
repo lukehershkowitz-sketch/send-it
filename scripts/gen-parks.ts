@@ -12,6 +12,7 @@ import type { RiderEvents } from '../src/rider/types';
 import { World, type ParkDef } from '../src/world/World';
 import { landingProfile, quarterProfile, type PieceDef } from '../src/world/pieces';
 import { TUNING } from '../src/tuning';
+import { popRelease } from './pilot';
 
 const out = (name: string, park: ParkDef) => {
   writeFileSync(new URL(`../src/world/parks/${name}.json`, import.meta.url), JSON.stringify(park, null, 2) + '\n');
@@ -102,18 +103,18 @@ const top = (H: number, R: number, angle: number) => quarterProfile(H, R, angle,
 // --------------------------------------------------------------------------- MEGA RAMP
 {
   const rollIn: Extract<PieceDef, { type: 'landing' }> = {
-    type: 'landing', pos: [0, 0, -70], height: 11, slope: 32, width: 7, deck: 6, faceAngle: 55, knuckleRadius: 5, transitionRadius: 12, surface: 'wood',
+    type: 'landing', pos: [0, 0, -70], height: 14, slope: 34, width: 7, deck: 6, faceAngle: 55, knuckleRadius: 5, transitionRadius: 14, surface: 'wood',
   };
   const rr = landingProfile(rollIn);
   const rollEnd = -70 + rr[1][rr[1].length - 1][0];
   const kickZ = rollEnd + 12;
-  const kicker = { type: 'kicker' as const, pos: [0, 0, kickZ] as [number, number, number], height: 3.2, angle: 30, width: 6, surface: 'wood' as const };
+  const kicker = { type: 'kicker' as const, pos: [0, 0, kickZ] as [number, number, number], height: 5.5, angle: 56, width: 6, surface: 'wood' as const };
   const landing = (z: number): Extract<PieceDef, { type: 'landing' }> => ({
-    type: 'landing', pos: [0, 0, z], height: 3.6, slope: 24, width: 10, deck: 0.5, faceAngle: 55, knuckleRadius: 4, transitionRadius: 10, surface: 'wood',
+    type: 'landing', pos: [0, 0, z], height: 4.6, slope: 26, width: 10, deck: 0.5, faceAngle: 55, knuckleRadius: 4, transitionRadius: 11, surface: 'wood',
   });
   const spawnZ = -70 + rr[0][1][0] + 2;
   const test = (landZ: number, pop: boolean) => {
-    const world = new World({ name: 't', spawn: { pos: [0, 11, spawnZ], yaw: 0, speed: 3 }, pieces: [{ type: 'ground', pos: [0, 0, 0], size: 400 }, rollIn, kicker, landing(landZ)] } as ParkDef);
+    const world = new World({ name: 't', groundGravityScale: 1, spawn: { pos: [0, 14, spawnZ], yaw: 0, speed: 3 }, pieces: [{ type: 'ground', pos: [0, 0, 0], size: 400 }, rollIn, kicker, landing(landZ)] } as ParkDef);
     const lip = world.lips[0];
     const ev = new Emitter<RiderEvents>();
     let res: boolean | null = null;
@@ -122,13 +123,12 @@ const top = (H: number, R: number, angle: number) => quarterProfile(H, R, angle,
     const r = new RiderController(world, ev);
     for (let t = 0; t < 14 && res === null; t += 1 / TUNING.physics.stepHz) {
       const i = emptyInput();
-      const d = lip.pos.z - r.pos.z;
-      if (pop && r.state === 'GROUNDED' && d < 2.8 && d > 0.3) i.pop = true;
+      if (pop && r.state === 'GROUNDED') popRelease(r, lip, i);
       r.step(1 / TUNING.physics.stepHz, i);
     }
     return res === true;
   };
-  const kLen = 3.2 / (1 - Math.cos(30 * Math.PI / 180)) * Math.sin(30 * Math.PI / 180);
+  const kLen = 5.5 / (1 - Math.cos(56 * Math.PI / 180)) * Math.sin(56 * Math.PI / 180);
   let lo = -1, hi = -1;
   const bar: string[] = [];
   for (let g = 2; g <= 20; g += 0.5) {
@@ -145,7 +145,8 @@ const top = (H: number, R: number, angle: number) => quarterProfile(H, R, angle,
   const qZ = landEnd + 22;
   out('mega', {
     name: 'Mega Ramp',
-    spawn: { pos: [0, 11, spawnZ], yaw: 0, speed: 3 },
+    groundGravityScale: 1,
+    spawn: { pos: [0, 14, spawnZ], yaw: 0, speed: 3 },
     finish: { pos: [0, 0, landEnd + 8], radius: 7, yaw: 180 },
     decor: { theme: 'meadow', trees: 300, rocks: 40, clear: 14, solidArea: true, lampLayout: 'perimeter', lamps: 20 },
     pieces: [

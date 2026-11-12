@@ -1,13 +1,16 @@
 import { Quaternion, Vector3 } from 'three';
 import { TUNING } from '../../tuning';
 import type { InputState } from '../../core/input/actions';
-import { DEG, UP, clamp, damp, dirFromYaw, lerp, quatFromForwardUp, tangentFromYaw, wrapAngle } from '../../core/math';
+import { DEG, UP, clamp, damp, lerp, quatFromForwardUp, tangentFromYaw, wrapAngle } from '../../core/math';
 import type { RiderController } from '../RiderController';
-import type { PopInfo, RiderState } from '../types';
+import type { RiderState } from '../types';
 
 const _a = new Vector3(), _t = new Vector3(), _np = new Vector3(), _o = new Vector3(), _d = new Vector3();
 const _f = new Vector3(), _rel = new Vector3(), _ql = new Quaternion();
 const FWD = new Vector3(0, 0, 1);
+const _fw = new Vector3(), _pf = new Vector3(), _pr = new Vector3(), _wa = new Vector3(), _rf = new Vector3();
+const _qw = new Quaternion();
+const smooth = (x: number) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
 
 export interface RideMode {
   pedal: boolean;      // W pedals (off in manuals: W/S balance instead)
@@ -34,11 +37,22 @@ export const Grounded = {
     rideStep(r, dt, input, FULL);
   },
 
-  /** Build the bike's orientation from heading + surface normal, plus lean. */
+  /**
+   * Build the bike's orientation: heading along the surface, pitched by where the two wheels
+   * actually sit (so it follows ramp curvature wheel by wheel), plus lean and the landing wobble.
+   */
   orient(r: RiderController, lean: number) {
     tangentFromYaw(r.visualYaw(), r.normal, _f);
+    const a = wheelPitch(r, _f);
+    r.wheelPitchOff = r.wheelPitchOff + (a - r.wheelPitchOff) * (1 - Math.exp(-30 / TUNING.physics.stepHz));
+    if (Math.abs(r.wheelPitchOff) > 1e-4) {
+      _fw.copy(_f).multiplyScalar(Math.cos(r.wheelPitchOff)).addScaledVector(r.normal, Math.sin(r.wheelPitchOff));
+      _f.copy(_fw).normalize();
+    }
     quatFromForwardUp(_f, r.normal, r.quat);
     r.quat.multiply(_ql.setFromAxisAngle(FWD, lean));
+    const w = r.wobble, ang = w.length();
+    if (ang > 1e-5) r.quat.multiply(_qw.setFromAxisAngle(_wa.copy(w).divideScalar(ang), ang));
   },
 } satisfies RiderState & { orient(r: RiderController, lean: number): void };
 
@@ -58,13 +72,22 @@ export function rideStep(r: RiderController, dt: number, input: InputState, mode
     const tDir = travelDir(r, _t);
 
     // ---------------------------------------------------------------- longitudinal forces
-    r.speed += -P.gravity * P.groundGravityScale * tDir.y * dt;
+    r.speed += -P.gravity * (r.world.def.groundGravityScale ?? P.groundGravityScale) * tDir.y * dt;
 
     const pitchNow = Math.asin(clamp(tDir.y, -1, 1));
     const dPitch = pitchNow - r.prevGroundPitch;
     r.prevGroundPitch = pitchNow;
+    // how fast the ground is rotating us nose-up (bike's own nose, so fakie flips the sign) and the g-load it puts on us
+    const rate = dPitch / dt;
+    r.groundPitchRate = damp(r.groundPitchRate, r.fakie ? -rate : rate, 16, dt);
+    r.travelPitchRate = damp(r.travelPitchRate, rate, 16, dt);
+    r.load = Math.min(4, 1 + (r.speed * Math.max(0, r.travelPitchRate)) / P.gravity);
+    // while loading a pop, W/S/A/D shift your weight instead of pedalling/braking
+    const loading = (input.pop && r.compression > 0.1) || r.popExtending;
+    r.shiftZ = damp(r.shiftZ, loading ? input.pedal - input.brake : 0, loading ? 10 : 8, dt);
+    r.shiftX = damp(r.shiftX, loading ? input.steer : 0, loading ? 10 : 8, dt);
 
-    if (mode.pedal && input.pedal > 0.05) {
+    if (mode.pedal && input.pedal > 0.05 && !loading) {
       if (r.fakie) {
         if (r.speed < R.fakieTurnSpeed && r.normal.y > 0.9) r.fakie = false; // pivot back to forward (on flat)
       } else if (r.speed < R.maxPedalSpeed) {
@@ -72,7 +95,7 @@ export function rideStep(r: RiderController, dt: number, input: InputState, mode
       }
       if (dPitch > 0 && r.speed < R.pumpMaxSpeed) r.speed += R.pumpGain * dPitch * input.pedal; // pumping a transition (works fakie too)
     }
-    if (mode.brake && input.brake > 0.05) r.speed = Math.max(0, r.speed - R.brakeDecel * input.brake * dt);
+    if (mode.brake && input.brake > 0.05 && !loading) r.speed = Math.max(0, r.speed - R.brakeDecel * input.brake * dt);
     if (r.speed > 0) r.speed = Math.max(0, r.speed - (R.rollingResistance + mode.extraDrag + R.airDrag * r.speed * r.speed) * dt);
     r.speed = Math.min(r.speed, R.maxSpeed);
     if (r.speed < 0) {
@@ -85,15 +108,33 @@ export function rideStep(r: RiderController, dt: number, input: InputState, mode
       travelDir(r, tDir);
     }
 
-    // ---------------------------------------------------------------- pop (load & release)
-    if (input.pop) r.compression = Math.min(1, r.compression + dt / POP.compressTime);
-    const released = !input.pop && r.popWasHeld;
-    r.popWasHeld = input.pop;
-    if (released && r.compression >= POP.minCompression) {
-      doPop(r, tDir, popTiming(r));
-      return false;
+    // ---------------------------------------------------------------- pop: preload → extension → takeoff
+    if (!r.popExtending) {
+      if (input.pop) {
+        r.compression = Math.min(1, r.compression + dt / POP.compressTime);
+        r.preloadTime += dt;
+      }
+      const released = !input.pop && r.popWasHeld;
+      if (released && r.compression >= POP.minCompression) startPop(r);
+      else if (!input.pop) { r.compression = Math.max(0, r.compression - dt / 0.1); r.preloadTime = 0; }
     }
-    if (!input.pop) r.compression = Math.max(0, r.compression - dt / 0.08);
+    r.popWasHeld = input.pop;
+    if (r.popExtending) {
+      r.extendT += dt;
+      r.popApplied = r.popStrength * smooth(r.extendT / POP.extendTime);
+      r.compression = Math.max(0, r.compression - dt / POP.extendTime);
+      if (r.extendT >= POP.extendTime) {
+        // fully extended: if the lip is about to arrive, stay loaded until it does (a fair timing window)
+        const coil = !r.popIsHop && lipDistance(r) < POP.coilSlack && r.extendT < POP.extendTime + POP.coilMax;
+        if (!coil) {
+          // otherwise leave the surface here with the whole push (too early: the ramp ahead rises above us)
+          r.vel.copy(tDir).multiplyScalar(r.speed);
+          r.pos.addScaledVector(r.normal, 0.02);
+          r.takeoff(true, true);
+          return false;
+        }
+      }
+    }
 
     // ---------------------------------------------------------------- move + ground follow
     const stepLen = r.speed * dt;
@@ -165,36 +206,50 @@ function travelDir(r: RiderController, out: Vector3): Vector3 {
   return tangentFromYaw(r.travelYaw, r.normal, out);
 }
 
-/** How well-timed is a release right now? Looks for a kicker lip ahead of us. */
-function popTiming(r: RiderController): { label: PopInfo['label']; factor: number } {
-  const POP = TUNING.pop;
-  const travel = dirFromYaw(r.travelYaw, _a);
+/** Pitch (rad, + = nose up) of the line between the two wheel contacts relative to the heading `f` along the surface. */
+function wheelPitch(r: RiderController, f: Vector3): number {
+  const P = TUNING.physics;
+  _rf.copy(f);
+  _pf.copy(r.pos).addScaledVector(_rf, 0.49).addScaledVector(r.normal, P.probeHeight);
+  _pr.copy(r.pos).addScaledVector(_rf, -0.49).addScaledVector(r.normal, P.probeHeight);
+  _d.copy(r.normal).negate();
+  const hf = r.world.raycast(_pf, _d, P.probeHeight + 0.35, ['surface']);
+  const hr = r.world.raycast(_pr, _d, P.probeHeight + 0.35, ['surface']);
+  if (!hf || !hr) return 0;
+  _wa.copy(hf.point).sub(hr.point);
+  const len = _wa.length();
+  if (len < 0.5 || len > 1.4) return 0;
+  _wa.divideScalar(len);
+  const a = Math.atan2(_wa.dot(r.normal), _wa.dot(_rf));
+  return clamp(a, -0.6, 0.6);
+}
+
+/** Horizontal distance (m) to a kicker lip we're riding at (Infinity if there isn't one). */
+function lipDistance(r: RiderController): number {
+  const travel = tangentFromYaw(r.travelYaw, UP, _a);
   for (const lip of r.world.lips) {
     _rel.copy(lip.pos).sub(r.pos);
-    const along = _rel.dot(lip.dir); // metres before the edge (horizontal)
-    const lateral = Math.abs(_rel.dot(lip.right));
-    if (lateral > lip.width / 2 + 0.4 || along < -0.3 || along > lip.length + 0.3) continue;
-    if (travel.dot(lip.dir) < 0.5) continue;
-    if (along <= POP.perfectWindow) return { label: 'PERFECT', factor: 1 };
-    const t = clamp((along - POP.perfectWindow) / Math.max(0.1, lip.length - POP.perfectWindow), 0, 1);
-    return { label: 'EARLY', factor: lerp(1, POP.earlyMinFactor, t) };
+    const along = _rel.dot(lip.dir);
+    if (Math.abs(_rel.dot(lip.right)) > lip.width / 2 + 0.4 || along < -0.3 || along > lip.length + 3) continue;
+    if (travel.dot(lip.dir) > 0.5) return Math.max(0, along);
   }
-  return { label: 'HOP', factor: POP.flatHopScale };
+  return Infinity;
 }
 
 const _pd = new Vector3();
-function doPop(r: RiderController, tDir: Vector3, timing: { label: PopInfo['label']; factor: number }) {
+/** Release of the preload: start the push-off. Nothing is added instantly; the push is delivered over `extendTime`. */
+function startPop(r: RiderController) {
   const POP = TUNING.pop;
-  const strength = POP.popSpeed * timing.factor * (POP.baseFraction + (1 - POP.baseFraction) * r.compression);
-  _pd.copy(r.normal).lerp(UP, POP.popUpBias).normalize();
-  r.vel.copy(tDir).multiplyScalar(r.speed).addScaledVector(_pd, strength);
-  r.pos.addScaledVector(r.normal, 0.02);
-  r.visCompVel -= 3 * r.compression; // extend legs
-  const info: PopInfo = { label: timing.label, factor: timing.factor, strength };
-  r.lastPop = info;
-  r.compression = 0;
-  r.events.emit('pop', info);
-  r.takeoff(true);
+  // preload quality: how deep you compressed, minus lost energy if you sat on it too long
+  const fatigue = Math.exp(-Math.max(0, r.preloadTime - POP.fatigueHold) * POP.fatigueRate);
+  const depth = r.compression * fatigue;
+  const hop = r.normal.y >= POP.rampNormalY && lipDistance(r) > 3;
+  r.popIsHop = hop;
+  r.popStrength = (hop ? POP.hopSpeed : POP.popSpeed) * (POP.baseFraction + (1 - POP.baseFraction) * depth);
+  r.popDir.copy(r.normal).lerp(UP, hop ? 1 : POP.popUpBias).normalize();
+  r.popExtending = true;
+  r.extendT = 0;
+  r.popApplied = 0;
 }
 
 /** Exposed for the late-pop path in the air. */
@@ -203,7 +258,7 @@ export function applyLatePop(r: RiderController) {
   const strength = POP.popSpeed * POP.lateFactor * (POP.baseFraction + (1 - POP.baseFraction) * r.lateCompression);
   _pd.copy(r.takeoffNormal).lerp(UP, POP.popUpBias).normalize();
   r.vel.addScaledVector(_pd, strength);
-  const info: PopInfo = { label: 'LATE', factor: POP.lateFactor, strength };
+  const info = { label: 'LATE' as const, factor: POP.lateFactor, strength };
   r.lastPop = info;
   r.compression = 0;
   r.lateTimer = 0;

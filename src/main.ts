@@ -3,6 +3,7 @@ import { TUNING } from './tuning';
 import { Emitter } from './core/events';
 import { GameLoop } from './core/loop';
 import { Input } from './core/input/Input';
+import { emptyInput } from './core/input/actions';
 import { saveBindings } from './core/input/bindings';
 import { applyTuningSettings, loadSettings, saveSettings, type Settings } from './core/settings';
 import { World } from './world/World';
@@ -356,6 +357,7 @@ events.on('landed', (l) => {
   if (l.air.airTime > 0.5 && !/^(FAKIE )?(AIR|HOP)$/.test(l.trick)) net.sendEvent('trick', l.trick);
   combo.addAir(l.air, l.stomped);
   sfx.land(l.impact, l.stomped);
+  chase.kick(l.impact * (l.stomped ? 0.6 : 1) * (l.air.airTime > 0.35 ? 1 : 0.4));
   particles.dust(rider.pos, Math.min(1.5, l.impact / 9));
 });
 events.on('pop', (p) => { hud.pop(p); sfx.pop(p.factor); particles.dust(rider.pos, 0.15); });
@@ -588,7 +590,23 @@ menu.show('main');
 loop.start();
 
 // handy in the console while tuning: window.sendit.rider, .tuning …
+/** Dev/test hook: advance the simulation n fixed steps with the given inputs (the loop is expected to be paused). */
+function debugStep(n: number, patch: Record<string, unknown> = {}) {
+  const dt = 1 / TUNING.physics.stepHz;
+  for (let k = 0; k < n; k++) {
+    rider.step(dt, { ...emptyInput(), ...patch });
+    combo.update(dt, rider.state);
+  }
+  rig.sync(rider, 1);
+  camTarget.pos = rider.state === 'BAILED' ? rig.riderBody.position : rig.root.position;
+  camTarget.speed = rider.state === 'GROUNDED' ? rider.speed : rider.vel.length();
+  camTarget.motionYaw = rider.motionYaw();
+  camTarget.airborne = rider.state === 'AIRBORNE';
+  camTarget.bailed = rider.state === 'BAILED';
+}
+
 (window as unknown as { sendit: unknown }).sendit = {
+  debugStep, snapCamera: () => chase.snap(camTarget), camTarget, camera,
   rider, rig, tuning: TUNING, loop, combo, chase, menu, sfx, recorder, replay, startReplay, exitReplay, net, ghosts, graphics, settings, applySettings,
   get world() { return world; }, get run() { return run; }, loadPark, newRun, closeMenu,
 };

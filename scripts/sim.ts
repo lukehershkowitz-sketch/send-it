@@ -9,6 +9,7 @@ import type { RiderEvents } from '../src/rider/types';
 import { World, type ParkDef } from '../src/world/World';
 import { ComboTracker } from '../src/tricks/Combo';
 import { TUNING } from '../src/tuning';
+import { flipPilot, popRelease, spinPilot } from './pilot';
 import park from '../src/world/parks/proto.json';
 
 type Script = (r: RiderController, t: number, inp: InputState) => void;
@@ -47,13 +48,12 @@ function run(name: string, script: Script, opts: { maxT?: number; setup?: (r: Ri
   console.log(`${name.padEnd(26)} v=${takeoffSpeed.toFixed(1)} | ${log.join(', ')} | ${done || banked || 'nothing banked'}`);
 }
 
-const distToLip = (r: RiderController) => lip.pos.z - r.pos.z;
 const air = (r: RiderController) => r.state === 'AIRBORNE' && r.airTime > 0.05;
 const deg = (rad: number) => Math.abs(rad) * 180 / Math.PI;
 const pedalTo = (speed: number): Script => (r, _t, i) => { if (r.state === 'GROUNDED' && r.pos.z < 0 && r.speed < speed) i.pedal = 1; };
-const popLip: Script = (r, _t, i) => { if (r.state === 'GROUNDED' && distToLip(r) < 2.8 && distToLip(r) > 0.3) i.pop = true; };
-const spinTo = (d: number, dir = 1): Script => (r, _t, i) => { if (air(r) && deg(r.spinAngle) < d - 25) i.steer = dir; };
-const flipTo = (d: number): Script => (r, _t, i) => { if (air(r) && r.flipAngle * 180 / Math.PI < d - 30) i.brake = 1; };
+const popLip: Script = (r, _t, i) => { if (r.state === 'GROUNDED') popRelease(r, lip, i); };
+const spinTo = (d: number, dir = 1): Script => (r, _t, i) => { if (air(r)) spinPilot(r, i, dir * d); };
+const flipTo = (d: number): Script => (r, _t, i) => { if (air(r)) flipPilot(r, i, d); };
 const whipTo = (d: number): Script => (r, _t, i) => { if (air(r) && deg(r.whipAngle) < d - 40) i.tailwhip = true; };
 const barTo = (d: number, startAfter = 0): Script => (r, _t, i) => { if (air(r) && r.airTime > startAfter && deg(r.barAngle) < d - 40) i.barspin = 1; };
 const hold = (k: 'tuck' | 'superman' | 'cancan', from: number, to: number): Script => (r, _t, i) => { if (air(r) && r.airTime > from && r.airTime < to) i[k] = true; };
@@ -62,7 +62,7 @@ const jump = (...s: Script[]) => all(pedalTo(12), popLip, ...s);
 
 console.log('--- approach speeds (each should land)');
 for (const v of [10, 11, 12]) {
-  run(`perfect pop @${v} + 360`, all(pedalTo(v), popLip, spinTo(360)));
+  run(`perfect pop @${v} + ${v < 12 ? 180 : 360}`, all(pedalTo(v), popLip, spinTo(v < 12 ? 180 : 360)));
   run(`coast from z=-1 @${v} + superman`, all((r, _t, i) => { if (r.state === 'GROUNDED' && r.pos.z < -1 && r.speed < v) i.pedal = 1; }, popLip, hold('superman', 0.1, 0.55)));
 }
 console.log('--- airs');
@@ -71,8 +71,7 @@ run('360', jump(spinTo(360)));
 run('360 again (repeat)', jump(spinTo(360)));
 run('360 other way (fresh)', jump(spinTo(360, -1)));
 run('backflip', jump(flipTo(360)));
-run('flair (button)', jump((r, _t, i) => { if (air(r) && r.flipAngle * 180 / Math.PI < 320) i.flair = true; }));
-run('flair (S + spin)', jump(flipTo(360), spinTo(180)));
+run('flair (button)', jump((r, _t, i) => { if (air(r) && r.flipEff * 180 / Math.PI < 95 && !(r.predicted.valid && r.predicted.time < 0.4)) i.flair = true; }));
 run('tailwhip', jump(whipTo(360)));
 run('double whip', jump(whipTo(720)));
 run('whip to bar', all(jump(whipTo(360)), (r, t, i) => { if (air(r) && r.whipsDone >= 1 && deg(r.barAngle) < 320) i.barspin = 1; }));
@@ -81,26 +80,27 @@ run('superman 0.7s', jump(hold('superman', 0.1, 0.8)));
 run('tuck held into landing', jump(hold('tuck', 0.1, 9)));
 run('can-can too short', jump(hold('cancan', 0.1, 0.25)));
 run('whip unfinished', jump((r, _t, i) => { if (air(r) && deg(r.whipAngle) < 170) i.tailwhip = true; }));
-run('360 backflip whip', jump(spinTo(360), flipTo(360), (r, t, i) => { if (air(r) && r.airTime > 0.15 && deg(r.whipAngle) < 320) i.tailwhip = true; }));
+run('backflip + tailwhip', jump(flipTo(360), (r, t, i) => { if (air(r) && r.airTime > 0.15 && deg(r.whipAngle) < 320) i.tailwhip = true; }));
 
 console.log('--- grinds (start lined up with the rail at x=7)');
 const onRailLine = (r: RiderController) => { r.pos.set(7, 0, -30); r.prevPos.copy(r.pos); };
 const hopAt = (z0: number, z1: number): Script => (r, _t, i) => { if (r.state === 'GROUNDED') i.pop = r.pos.z > z0 && r.pos.z < z1; };
 const pedalUntil = (z: number, v = 7): Script => (r, _t, i) => { if (r.state === 'GROUNDED' && r.pos.z < z && r.speed < v) i.pedal = 1; };
 const balance: Script = (r, _t, i) => { if (r.state === 'GRINDING') i.steer = Math.max(-1, Math.min(1, -r.balance * 3 - r.balanceVel * 1.2)); };
-run('hop onto rail, balanced', all(pedalUntil(-17), hopAt(-16.6, -15.4), balance), { setup: onRailLine });
-run('hop onto rail, no balance', all(pedalUntil(-17), hopAt(-16.6, -15.4)), { setup: onRailLine });
-run('rail, angled entry', all(pedalUntil(-17), hopAt(-16.6, -15.4), balance), { setup: (r) => { r.pos.set(6.2, 0, -30); r.heading = r.travelYaw = 0.06; r.prevPos.copy(r.pos); } });
-run('rail, pop off + 180', all(pedalUntil(-17), hopAt(-16.6, -15.4), balance,
+run('hop onto rail, balanced', all(pedalUntil(-19.5), hopAt(-18.4, -16.7), balance), { setup: onRailLine });
+run('hop onto rail, no balance', all(pedalUntil(-19.5), hopAt(-18.4, -16.7)), { setup: onRailLine });
+run('rail, angled entry', all(pedalUntil(-19.5), hopAt(-18.4, -16.7), balance), { setup: (r) => { r.pos.set(6.2, 0, -30); r.heading = r.travelYaw = 0.06; r.prevPos.copy(r.pos); } });
+run('rail, pop off', all(pedalUntil(-19.5), hopAt(-18.4, -16.7), balance,
   (r, _t, i) => { if (r.state === 'GRINDING') i.pop = r.railT > 0.6 && r.railT < 0.75; },
-  (r, _t, i) => { if (air(r) && r.fromGrind && deg(r.spinAngle) < 155) i.steer = 1; }), { setup: onRailLine, maxT: 12 });
+  (r, _t, i) => { if (r.state === 'GROUNDED' && r.pos.z > -12.5) i.steer = 1; }, // roll away from the end of the rail
+), { setup: onRailLine, maxT: 12 });
 const angled = (r: RiderController) => { r.pos.set(4.2, 0, -21); r.heading = r.travelYaw = 0.3; r.prevPos.copy(r.pos); };
 const hopX = (x: number): Script => (r, _t, i) => { if (r.state === 'GROUNDED') { i.pop = r.pos.x > x - 1 && r.pos.x < x; if (r.speed < 6) i.pedal = 1; } };
 run('angled → feeble', all(hopX(6.2), balance), { setup: angled });
 run('angled + turn → smith', all(hopX(6.2), balance, (r, _t, i) => { if (air(r) && r.airTime < 0.25) i.steer = 1; }), { setup: angled });
-run('pull up (S) → icepick', all(pedalUntil(-17), hopAt(-16.6, -15.4), balance, (r, _t, i) => { if (air(r) && !r.fromGrind) i.brake = 1; }), { setup: onRailLine });
+run('pull up (S) → icepick', all(pedalUntil(-19.5), hopAt(-18.4, -16.7), balance, (r, _t, i) => { if (air(r) && !r.fromGrind) i.brake = 1; }), { setup: onRailLine });
 run('rail sideways → bail', all(hopX(6.4)), { setup: (r) => { r.pos.set(1, 0, -10.5); r.heading = r.travelYaw = Math.PI / 2; r.prevPos.copy(r.pos); } });
-run('ledge', all(pedalUntil(-26, 6.5), hopAt(-25.2, -24), balance), { setup: (r) => { r.pos.set(-6.65, 0, -40); r.prevPos.copy(r.pos); } });
+run('ledge', all(pedalUntil(-26, 6.5), hopAt(-27.4, -25.6), balance), { setup: (r) => { r.pos.set(-6.65, 0, -40); r.prevPos.copy(r.pos); } });
 
 console.log('--- manuals');
 const manualBal = (nose: boolean): Script => (r, _t, i) => {

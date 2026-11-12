@@ -12,19 +12,20 @@ import type { RiderEvents } from '../src/rider/types';
 import { World, type ParkDef } from '../src/world/World';
 import { kickerProfile, landingProfile, type PieceDef } from '../src/world/pieces';
 import { TUNING } from '../src/tuning';
+import { popRelease, spinPilot } from './pilot';
 
 /** needsPop: the gap is sized so you have to pop (rolling off cases it). */
 type Jump = { h: number; a: number; lh: number; slope: number; w: number; turn: number; needsPop?: boolean };
 const JUMPS: Jump[] = [
-  { h: 1.4, a: 32, lh: 1.5, slope: 25, w: 3.2, turn: 0 },
-  { h: 1.6, a: 33, lh: 1.7, slope: 26, w: 3.2, turn: 4 },
-  { h: 1.8, a: 34, lh: 1.9, slope: 27, w: 3.4, turn: 4 },
-  { h: 1.8, a: 34, lh: 1.9, slope: 27, w: 3.4, turn: -3 },
-  { h: 2.0, a: 35, lh: 2.2, slope: 28, w: 3.4, turn: -6, needsPop: true },
-  { h: 2.2, a: 36, lh: 2.4, slope: 28, w: 3.6, turn: -4, needsPop: true },
-  { h: 2.0, a: 35, lh: 2.2, slope: 28, w: 3.4, turn: 5, needsPop: true },
-  { h: 2.4, a: 37, lh: 2.7, slope: 29, w: 3.8, turn: 6, needsPop: true },
-  { h: 2.6, a: 38, lh: 3.0, slope: 30, w: 4.0, turn: 0, needsPop: true },
+  { h: 1.4, a: 32, lh: 1.15, slope: 25, w: 3.2, turn: 0, needsPop: true },
+  { h: 1.6, a: 33, lh: 1.35, slope: 25, w: 3.2, turn: 4, needsPop: true },
+  { h: 1.8, a: 34, lh: 1.55, slope: 25, w: 3.4, turn: 4, needsPop: true },
+  { h: 1.8, a: 34, lh: 1.55, slope: 25, w: 3.4, turn: -3, needsPop: true },
+  { h: 2.0, a: 35, lh: 1.75, slope: 25, w: 3.4, turn: -6, needsPop: true },
+  { h: 2.2, a: 36, lh: 1.95, slope: 25, w: 3.6, turn: -4, needsPop: true },
+  { h: 2.0, a: 35, lh: 1.75, slope: 25, w: 3.4, turn: 5, needsPop: true },
+  { h: 2.4, a: 37, lh: 2.15, slope: 25, w: 3.8, turn: 6, needsPop: true },
+  { h: 2.6, a: 38, lh: 2.35, slope: 25, w: 4.0, turn: 0, needsPop: true },
 ];
 const RUNWAY = 13;      // flat between a landing and the next kicker
 const DECK = 0.3, KNUCKLE = 2, TRANS = 5;
@@ -35,7 +36,8 @@ const landingDef = (j: Jump, z: number): Extract<PieceDef, { type: 'landing' }> 
 });
 
 /** Simulate one jump in isolation. Returns true if it lands clean. */
-function tryJump(j: Jump, landingZ: number, pop: boolean, spin: boolean, releaseAt = 0.3): boolean {
+function tryJump(j: Jump, landingZ: number, pop: boolean, spin: boolean, lead = 0): boolean {
+  const spinDeg = j.h >= 2.0 ? 360 : 180; // bigger doubles are rated for a 360, small ones a 180
   const def: ParkDef = {
     name: 'test', spawn: { pos: [0, 0, -28], yaw: 0 },
     pieces: [
@@ -54,10 +56,9 @@ function tryJump(j: Jump, landingZ: number, pop: boolean, spin: boolean, release
   const dt = 1 / TUNING.physics.stepHz;
   for (let t = 0; t < 8 && result === null; t += dt) {
     const i = emptyInput();
-    const d = lip.pos.z - r.pos.z;
     if (r.state === 'GROUNDED' && r.pos.z < 0) i.pedal = 1;
-    if (pop && r.state === 'GROUNDED' && d < releaseAt + 2.3 && d > releaseAt) i.pop = true;
-    if (spin && r.state === 'AIRBORNE' && r.airTime > 0.05 && Math.abs(r.spinAngle) < (335 * Math.PI) / 180) i.steer = 1;
+    if (pop && r.state === 'GROUNDED') popRelease(r, lip, i, lead);
+    if (spin && r.state === 'AIRBORNE') spinPilot(r, i, spinDeg);
     r.step(dt, i);
   }
   return result === true;
@@ -68,14 +69,18 @@ function solveGap(j: Jump): number {
   const kLen = kickerProfile(j.h, j.a).length;
   let best: [number, number] = [0, -1], cur: number | null = null;
   const ok: number[] = [];
-  for (let g = 0; g <= 6; g += 0.2) {
+  const diag: string[][] = [[], [], [], []];
+  for (let g = 0; g <= 9; g += 0.2) {
     const z = kLen + g;
-    const pass = (j.needsPop || tryJump(j, z, false, false)) && tryJump(j, z, true, false) && tryJump(j, z, true, true) &&
-      tryJump(j, z, true, false, 2.4); // a slightly early pop still makes it
+    const t = [j.needsPop || tryJump(j, z, false, false), tryJump(j, z, true, false), tryJump(j, z, true, true), tryJump(j, z, true, false, 0.6)];
+    t.forEach((v, k) => diag[k].push(v ? '█' : '·'));
+    const pass = t.every(Boolean);
     ok.push(pass ? 1 : 0);
     if (pass) { cur ??= g; if (g - cur > best[1] - best[0]) best = [cur, g]; }
     else cur = null;
   }
+  if (best[1] < 0) console.log(`  roll-off  ${diag[0].join('')}\n  pop       ${diag[1].join('')}\n  pop+spin  ${diag[2].join('')}\n  early pop ${diag[3].join('')}`);
+  if (best[1] - best[0] < 0.6) console.warn(`  ⚠ narrow window (${(best[1] - best[0]).toFixed(1)} m) for jump ${JSON.stringify(j)}`);
   if (best[1] < 0) throw new Error(`no working gap for jump ${JSON.stringify(j)}`);
   console.log(`h=${j.h} a=${j.a}: window ${best[0].toFixed(1)}–${best[1].toFixed(1)} m  ${ok.map((o) => (o ? '█' : '·')).join('')}`);
   return Math.max(Math.min(1.2, best[1]), best[0] + (best[1] - best[0]) * 0.55);

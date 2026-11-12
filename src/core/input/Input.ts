@@ -79,6 +79,8 @@ export class Input {
     s.superman = val.superman > 0.5;
     s.cancan = val.cancan > 0.5;
     s.manual = val.manual > 0.5;
+    s.roll = val.roll > 0.5;
+    s.tabletop = val.tabletop > 0.5;
 
     // Free look: right mouse drag, or hold R3 + right stick.
     const sens = TUNING.camera.freeLookSensitivity;

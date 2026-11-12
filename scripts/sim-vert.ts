@@ -6,6 +6,7 @@ import { RiderController } from '../src/rider/RiderController';
 import type { RiderEvents } from '../src/rider/types';
 import { World, type ParkDef } from '../src/world/World';
 import { TUNING } from '../src/tuning';
+import { flipPilot, spinPilot } from './pilot';
 
 // halfpipe: two 3.4 m quarters facing each other, 6 m flat bottom
 const H = 3.4, R = 3.0, FLAT = 6, W = 10;
@@ -41,9 +42,9 @@ function run(name: string, speed: number, script: Script, maxT = 6) {
 const air = (r: RiderController) => r.state === 'AIRBORNE' && r.airTime > 0.05;
 const deg = (x: number) => Math.abs(x) * 180 / Math.PI;
 for (const v of [9, 11, 13]) run(`fakie air @${v}`, v, () => {});
-run('180 air @12', 12, (r, _t, i) => { if (air(r) && deg(r.spinAngle) < 160) i.steer = 1; });
-run('360 air @13', 13, (r, _t, i) => { if (air(r) && deg(r.spinAngle) < 335) i.steer = -1; });
-run('backflip @13', 13, (r, _t, i) => { if (air(r) && r.flipAngle * 180 / Math.PI < 330) i.brake = 1; });
+run('180 air @12', 12, (r, _t, i) => { if (air(r)) spinPilot(r, i, 180); });
+run('360 air @13', 13, (r, _t, i) => { if (air(r)) spinPilot(r, i, -360); });
+run('backflip @13', 13, (r, _t, i) => { if (air(r)) flipPilot(r, i, 360); });
 run('too slow (no air) @7', 7, () => {}, 4);
 run('tailwhip @12', 12, (r, _t, i) => { if (air(r) && deg(r.whipAngle) < 320) i.tailwhip = true; });
 
@@ -60,7 +61,7 @@ run('tailwhip @12', 12, (r, _t, i) => { if (air(r) && deg(r.whipAngle) < 320) i.
   for (let t = 0; t < 20; t += dt) {
     const i = emptyInput();
     i.pedal = 1;
-    if (r.state === 'AIRBORNE') { i.pedal = 0; if (r.airTime > 0.05 && deg(r.spinAngle) < 160) i.steer = 1; }
+    if (r.state === 'AIRBORNE') { i.pedal = 0; spinPilot(r, i, 180); }
     r.step(dt, i);
   }
   console.log(`sustain 20s: ${airs.length} airs, ${bails} bails: ${airs.join(', ')}`);

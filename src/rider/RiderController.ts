@@ -2,7 +2,7 @@ import { Quaternion, Vector3 } from 'three';
 import { TUNING } from '../tuning';
 import type { Emitter } from '../core/events';
 import { type InputState, emptyInput } from '../core/input/actions';
-import { DEG, UP, clamp, projectOnPlane, quatFromYawPitch, wrapAngle, yawOf } from '../core/math';
+import { DEG, UP, clamp, projectOnPlane, wrapAngle } from '../core/math';
 import type { World } from '../world/World';
 import {
   VARIATIONS, type AirData, type DebrisBody, type GrindType, type LandingCheck, type LandingResult, type PopInfo,
@@ -10,6 +10,8 @@ import {
 } from './types';
 import type { RailSeg } from '../world/World';
 import { describeAir } from '../tricks/scoring';
+import { bikeRoll, makeRot, resetRot, type RotState } from './aero';
+import { RiderBody } from './RiderBody';
 import { Grounded } from './states/Grounded';
 import { Airborne } from './states/Airborne';
 import { Bailed } from './states/Bailed';
@@ -49,29 +51,48 @@ export class RiderController {
   yawVisOffset = 0; // residual yaw from landing slightly crooked, eases out
   prevGroundPitch = 0;
 
-  // --- pop
+  // --- pop: preload (hold) → extension (release) → takeoff. The push is spread over the extension.
   compression = 0;
+  preloadTime = 0;
   popWasHeld = false;
+  popExtending = false;
+  extendT = 0;
+  popStrength = 0;          // the full push this pop would give (m/s)
+  popApplied = 0;           // how much of it has been delivered so far
+  popIsHop = false;
+  popDir = new Vector3(0, 1, 0);
+  extendPose = 0;           // 0..1 visual push-off extension (rises during the push, fades after takeoff)
+  shiftX = 0;               // body-weight shift intent while loaded (−1 left … +1 right)
+  shiftZ = 0;               // (−1 back … +1 forward)
+  hopT = 0;                 // front-wheel-lift timer for bunny hops
   lateTimer = 0;
   lateCompression = 0;
   takeoffNormal = new Vector3(0, 1, 0);
   lastPop: PopInfo | null = null;
+  travelPitchRate = 0;      // smoothed pitch rate of the travel direction (ramp curvature × speed)
+  wheelPitchOff = 0;        // smoothed pitch of the wheel-to-wheel line vs the surface tangent
+  groundPitchRate = 0;      // rad/s the ground is rotating the bike nose-up (ramp curvature × speed)
+  load = 1;                 // g-load from ramp curvature (1 = flat ground)
 
-  // --- air
-  airYaw = 0;
-  basePitch = 0;    // pitch from trajectory-follow (+ takeoff offset), excludes flips
-  pitchOffset = 0;  // takeoff pitch relative to the auto-level target; eases to 0
-  airGroundNormal = new Vector3(0, 1, 0); // smoothed normal of the predicted landing surface
+  // --- air: a real rigid-body rotation (see aero.ts); rider's own motion lives in `body`
+  rot: RotState = makeRot();
+  body = new RiderBody();
   /** Air rotation frame: identity off kickers; off a vert wall its "up" is the wall normal. */
   airFrame = new Quaternion();
   airFrameInv = new Quaternion();
   vertAir = false;
+  airGroundNormal = new Vector3(0, 1, 0); // smoothed normal of the predicted landing surface
   /** Ballistic prediction of where we'll touch down (refreshed ~30 Hz while airborne). */
   predicted = { valid: false, point: new Vector3(), normal: new Vector3(0, 1, 0), time: 99 };
-  flipAngle = 0;    // input-driven pitch rotation (rad, backflip +)
-  spinAngle = 0;    // input-driven yaw rotation (rad, signed)
-  spinVel = 0;
-  flipVel = 0;
+  get spinAngle() { return this.rot.spin; }   // accumulated horizontal rotation (rad, + = left)
+  get flipAngle() { return this.rot.flip; }   // accumulated flip (rad, + = backflip)
+  get rollAngle() { return this.rot.roll; }   // accumulated roll (rad, + = right side down)
+  /** Nose elevation at takeoff, and where the bike would be pitched with no flip at all (flight path → landing slope). */
+  airHeading = new Vector3(0, 0, 1); // horizontal facing (in the frame), turned only by spin: stays defined through flips
+  noseAtTakeoff = 0;
+  naturalPitch = 0;
+  /** Flip amount (rad) relative to that natural attitude change: a kicker launches nose-up and the landing wants nose-down, so a clean backflip is ~300° of raw rotation but counts as 360°. */
+  get flipEff() { return this.rot.flip - (this.naturalPitch - this.noseAtTakeoff); }
   airTime = 0;
   predictCounter = 0;
   takeoffFakie = false;
@@ -86,14 +107,21 @@ export class RiderController {
   whipsDone = 0;
   barsDone = 0;
   chain: AirData['chain'] = [];
-  flairActive = false;
-  flairDir = 1;
   lastSpinDir = 1;
+  assistCalm = 0;           // 0..1: how much the stabiliser is following the flight path (off while you're tricking)
+  tableDir = 1;             // which side the tabletop rolls toward
+  tablePressed = false;
   varBlend: Record<Variation, number> = { tuck: 0, superman: 0, cancan: 0 };
   varHold: Record<Variation, number> = { tuck: 0, superman: 0, cancan: 0 };
   varBest: Record<Variation, number> = { tuck: 0, superman: 0, cancan: 0 };
   feetOff = 0;      // visual: feet off the pedals (whips)
   handsOff = 0;     // visual: hands off the bars (barspins)
+
+  // --- landing wobble: rotation of the bike relative to the ground (body-frame rotation vector, rad)
+  wobble = new Vector3();
+  wobbleV = new Vector3();
+  private lastVel = new Vector3();
+  accelB = new Vector3();   // felt acceleration in the bike frame (m/s²), for the rider's inertia
 
   // --- balance (grinds + manuals): -1..1, |b| ≥ 1 = bail
   balance = 0;
@@ -126,8 +154,6 @@ export class RiderController {
   prevQuat = new Quaternion();
   lean = 0;
   wheelAngle = 0;
-  visComp = 0;
-  visCompVel = 0;
 
   // --- results / bail
   lastLanding: LandingResult | null = null;
@@ -158,6 +184,8 @@ export class RiderController {
     this.prevPos.copy(this.pos);
     this.prevQuat.copy(this.quat);
     this.stateTime += dt;
+    this.updateWobble(dt);
+    this.lastVel.copy(this.vel);
     this.current.update(this, dt, input);
 
     if (this.state !== 'AIRBORNE') {
@@ -169,12 +197,57 @@ export class RiderController {
     this.ignoreRailTime = Math.max(0, this.ignoreRailTime - dt);
     this.manualWasHeld = input.manual;
 
-    // suspension / body spring (visual only)
-    this.visCompVel += (-140 * this.visComp - 16 * this.visCompVel) * dt;
-    this.visComp = clamp(this.visComp + this.visCompVel * dt, -0.2, 1);
+    this.updateBody(dt);
 
     if (this.state !== 'BAILED' && this.pos.y < TUNING.physics.killY) this.respawn();
     if (this.state !== 'BAILED') this.trackProgress();
+  }
+
+  /** Landing wobble: a spring pulling the bike's orientation back onto the ground. */
+  private updateWobble(dt: number) {
+    const L = TUNING.landing;
+    if (this.state !== 'GROUNDED' && this.state !== 'MANUALING') { this.wobble.set(0, 0, 0); this.wobbleV.set(0, 0, 0); return; }
+    this.wobbleV.addScaledVector(this.wobble, -L.wobbleStiffness * dt).addScaledVector(this.wobbleV, -L.wobbleDamping * dt);
+    this.wobble.addScaledVector(this.wobbleV, dt);
+  }
+
+  /** Rider body targets from what the bike is doing. */
+  private updateBody(dt: number) {
+    const P = TUNING.pop;
+    const st = this.state;
+    const B = this.body;
+    // push-off extension: rises through the push, fades after takeoff
+    this.extendPose = this.popExtending
+      ? Math.min(1, this.extendT / P.extendTime)
+      : Math.max(0, this.extendPose - dt * 4);
+    // felt acceleration in the bike frame (gravity removed), for the rider's inertia
+    this.accelB.copy(this.vel).sub(this.lastVel).divideScalar(dt);
+    if (st === 'AIRBORNE') this.accelB.set(0, 0, 0);
+    else this.accelB.y += TUNING.physics.gravity;
+    this.accelB.clampLength(0, 60).applyQuaternion(_q.copy(this.quat).invert());
+
+    let crouch = 0, sx = 0, sz = 0, table = 0;
+    if (st === 'AIRBORNE') {
+      const w = this.rot.omegaB;
+      const curl = 0.5 * clamp(Math.abs(w.x) / 6, 0, 1) + 0.22 * clamp(Math.abs(w.y) / 9, 0, 1) + 0.12 * clamp(Math.abs(w.z) / 7, 0, 1);
+      const tl = this.predicted.valid ? this.predicted.time : 99;
+      const prep = clamp((0.42 - tl) / 0.28, 0, 1) * (1 - 0.7 * clamp(this.rot.omega.length() / 5, 0, 1));
+      crouch = (0.3 + curl) * (1 - prep) + -0.18 * prep - this.extendPose * 0.55;
+      const roll = bikeRoll(this.rot);
+      sz = clamp(-w.x * 0.0125, -0.14, 0.14);
+      sx = clamp(-w.y * 0.01 + 0.12 * Math.sin(roll), -0.14, 0.14);
+      table = clamp((Math.abs(roll) - 35 * DEG) / (37 * DEG), 0, 1);
+    } else if (st === 'GRINDING') {
+      crouch = 0.35;
+      sx = -this.balance * 0.08;
+    } else {
+      const preload = this.compression * (this.popExtending ? 1 - Math.min(1, this.extendT / P.extendTime) : 1);
+      const loadComp = clamp((this.load - 1) * P.loadCompress, 0, P.loadMaxCompress);
+      crouch = Math.max(preload, loadComp) - this.extendPose * 0.5 + (st === 'MANUALING' ? 0.15 : 0);
+      sz = clamp(this.shiftZ * 0.12 - this.accelB.z * 0.003, -0.16, 0.16);
+      sx = clamp(-this.shiftX * 0.1 - this.accelB.x * 0.002, -0.14, 0.14);
+    }
+    B.update(dt, { crouch, shiftX: sx, shiftZ: sz, table });
   }
 
   /** Checkpoints + finish line. */
@@ -222,10 +295,21 @@ export class RiderController {
     this.fakieVis = 0;
     this.yawVisOffset = 0;
     this.compression = 0;
+    this.preloadTime = 0;
     this.popWasHeld = false;
+    this.popExtending = false;
+    this.extendPose = 0;
+    this.shiftX = this.shiftZ = 0;
+    this.hopT = 0;
     this.lateTimer = 0;
-    this.spinVel = this.flipVel = 0;
-    this.visComp = this.visCompVel = 0;
+    this.groundPitchRate = 0;
+    this.wheelPitchOff = 0;
+    this.travelPitchRate = 0;
+    this.load = 1;
+    this.rot.omega.set(0, 0, 0);
+    this.body.reset();
+    this.wobble.set(0, 0, 0);
+    this.wobbleV.set(0, 0, 0);
     this.lean = 0;
     this.resetTricks();
     for (const v of VARIATIONS) this.varBlend[v] = 0;
@@ -244,10 +328,25 @@ export class RiderController {
 
   // ------------------------------------------------------------------ transitions
 
-  /** Leave the ground with the current `vel`. */
-  takeoff(popped: boolean): void {
+  /**
+   * Leave the ground with the current `vel`. If a pop was extending, whatever push had built up by
+   * now is added (a lip that arrives early cuts it short; `ended` = the extension finished first).
+   */
+  takeoff(popped: boolean, ended = false): void {
+    const A = TUNING.air, P = TUNING.pop;
+    const wasHop = this.popIsHop && this.popExtending;
+    if (this.popExtending) {
+      const applied = ended ? this.popStrength : this.popApplied;
+      this.vel.addScaledVector(this.popDir, applied);
+      const frac = this.popStrength > 0 ? applied / this.popStrength : 0;
+      const label: PopInfo['label'] = wasHop ? 'HOP' : ended ? 'EARLY' : frac >= 0.92 ? 'PERFECT' : 'LATE';
+      const info: PopInfo = { label, factor: frac, strength: applied };
+      this.lastPop = info;
+      this.events.emit('pop', info);
+      this.popExtending = false;
+      popped = true;
+    }
     // vert: leaving a near-vertical wall going up → spin/flip in the wall's frame, come back down it
-    const A = TUNING.air;
     this.vertAir = this.normal.y < A.vertNormalY && this.vel.y > 0.5;
     if (this.vertAir) {
       _u.set(this.normal.x, 0, this.normal.z).normalize();
@@ -255,23 +354,35 @@ export class RiderController {
       this.vel.addScaledVector(_u, A.vertOutSpeed - this.vel.dot(_u));
     } else this.airFrame.identity();
     this.airFrameInv.copy(this.airFrame).invert();
-    // orientation at takeoff (without lean), in the air frame
-    _f.copy(FWD).applyQuaternion(this.groundQuatNoLean()).applyQuaternion(this.airFrameInv);
-    this.airYaw = yawOf(_f);
-    this.basePitch = Math.asin(clamp(_f.y, -1, 1));
+
+    // the bike keeps the rotation the ramp was giving it (v · curvature), plus the rider's weight shift
+    const q0 = this.groundQuatNoLean();
+    const xb = _f.set(1, 0, 0).applyQuaternion(q0).clone();
+    const zb = _u.set(0, 0, 1).applyQuaternion(q0).clone();
+    const omega = new Vector3()
+      .addScaledVector(xb, -this.groundPitchRate * P.pitchRateKeep)          // nose-up rate = backflip direction (−X)
+      .addScaledVector(xb, this.shiftZ * P.shiftRate)                         // forward lean → frontflip direction
+      .addScaledVector(zb, this.shiftX * P.shiftRate * 0.7);                  // sideways lean → roll
+    if (wasHop && popped) omega.addScaledVector(xb, -P.hopFrontLift);        // bunny hop: front wheel first
+    resetRot(this.rot, q0, omega, _pv.copy(UP).applyQuaternion(this.airFrame));
+    this.noseAtTakeoff = this.naturalPitch = Math.asin(clamp(zb.dot(this.rot.frameUp), -1, 1));
+    this.airHeading.copy(zb).addScaledVector(this.rot.frameUp, -zb.dot(this.rot.frameUp));
+    if (this.airHeading.lengthSq() < 1e-4) this.airHeading.set(0, 0, 1).applyQuaternion(this.airFrame);
+    this.airHeading.normalize();
+    this.hopT = wasHop && popped ? P.hopLiftTime : 0;
+    this.popIsHop = false;
+    this.shiftX = this.shiftZ = 0;
+
     this.airGroundNormal.copy(this.normal);
     this.predictLanding();
-    this.pitchOffset = this.basePitch - this.autoLevelTarget();
-    this.flipAngle = this.spinAngle = 0;
-    this.spinVel = this.flipVel = 0;
     this.airTime = 0;
     this.takeoffFakie = this.fakie;
     this.fromGrind = this.state === 'GRINDING';
     this.resetTricks();
     this.takeoffNormal.copy(this.normal);
     this.pedalLatched = TUNING.air.latchPedalAtTakeoff && this.input.pedal > 0.2;
-    if (!popped && this.input.pop && this.compression >= TUNING.pop.minCompression) {
-      this.lateTimer = TUNING.pop.lateWindow;
+    if (!popped && this.input.pop && this.compression >= P.minCompression) {
+      this.lateTimer = P.lateWindow;
       this.lateCompression = this.compression;
     } else this.lateTimer = 0;
     this.setState('AIRBORNE');
@@ -282,7 +393,6 @@ export class RiderController {
     this.whipAngle = this.whipVel = this.barAngle = this.barVel = 0;
     this.whipsDone = this.barsDone = 0;
     this.chain = [];
-    this.flairActive = false;
     for (const v of VARIATIONS) { this.varHold[v] = 0; this.varBest[v] = 0; }
   }
 
@@ -292,8 +402,12 @@ export class RiderController {
     for (const v of VARIATIONS) if (this.varBest[v] > 0) variations[v] = this.varBest[v];
     return {
       airTime: this.airTime,
-      spinDeg: this.spinAngle / DEG,
-      flipDeg: this.flipAngle / DEG,
+      spinDeg: this.rot.spin / DEG,
+      flipDeg: this.flipEff / DEG,
+      rollDeg: this.rot.roll / DEG,
+      maxTiltDeg: this.rot.maxTilt / DEG,
+      maxRollDeg: this.rot.maxRoll / DEG,
+      tableTime: this.rot.tableTime,
       chain: [...this.chain],
       barDir: this.barDir,
       variations,
@@ -305,23 +419,6 @@ export class RiderController {
   /** Ground orientation ignoring lean (used for takeoff). */
   groundQuatNoLean(): Quaternion {
     return this.quat.clone().multiply(_q.setFromAxisAngle(FWD, -this.lean));
-  }
-
-  /**
-   * Where the auto-level wants the nose (rad), for the current facing: follows the trajectory
-   * high up, and lines up with the surface below as you come down to it.
-   */
-  autoLevelTarget(): number {
-    const A = TUNING.air;
-    const fx = Math.sin(this.airYaw), fz = Math.cos(this.airYaw);
-    const v = _pv.copy(this.vel).applyQuaternion(this.airFrameInv); // frame space
-    const horiz = Math.max(0.01, Math.hypot(v.x, v.z));
-    const facing = (fx * v.x + fz * v.z) / horiz; // cos(facing vs travel)
-    const traj = Math.atan2(v.y, horiz) * facing;
-    const n = _ps.copy(this.airGroundNormal).applyQuaternion(this.airFrameInv);
-    const ground = Math.atan2(-(n.x * fx + n.z * fz), n.y);
-    const w = clamp(1 - this.predicted.time / A.alignTime, A.groundAlignMin, 1);
-    return A.autoLevel * (traj + (ground - traj) * w);
   }
 
   /** Step the ballistic path forward and raycast it to find the touchdown surface. */
@@ -350,17 +447,18 @@ export class RiderController {
     pr.time = 99;
   }
 
-  /** Air orientation from yaw / base pitch / flip. */
+  /** Air orientation. */
   airQuat(out: Quaternion): Quaternion {
-    return quatFromYawPitch(this.airYaw, this.basePitch + this.flipAngle, out).premultiply(this.airFrame);
+    return out.copy(this.rot.q);
   }
 
   /** Evaluate a landing against surface normal `n` with the current orientation + velocity. */
   checkLanding(n: Vector3, input: InputState): LandingCheck {
     const L = TUNING.landing;
-    this.airQuat(_q);
-    _f.copy(FWD).applyQuaternion(_q);
-    _u.copy(UP).applyQuaternion(_q);
+    _q.copy(this.rot.q);
+    _f.set(0, 0, 1).applyQuaternion(_q);
+    _u.set(0, 1, 0).applyQuaternion(_q);
+    const xb = _pd.set(1, 0, 0).applyQuaternion(_q);
     projectOnPlane(this.vel, n, _vt);
     if (_vt.lengthSq() < 0.01) projectOnPlane(_f, n, _vt);
     _vt.normalize();
@@ -371,15 +469,21 @@ export class RiderController {
     const fakie = yawRaw > 90;
     const yawErr = fakie ? 180 - yawRaw : yawRaw;
     const pitchErr = Math.asin(clamp(Math.abs(_f.dot(n)), 0, 1)) / DEG;
+    const rollErr = Math.asin(clamp(Math.abs(xb.dot(n)), 0, 1)) / DEG;
     const inverted = _u.dot(n) < 0.2;
+    // which wheel touches first: nose rising away from the ground = rear first (relative to the riding direction)
+    const rideDir = _f.dot(this.vel) >= 0 ? 1 : -1;
+    const pitchSigned = _f.dot(n) * rideDir;
+    const wheelFirst: LandingCheck['wheelFirst'] = pitchErr < 4 ? 'both' : pitchSigned > 0 ? 'rear' : 'front';
     // tiny unintended airs (rolling over a knuckle) don't need released inputs
     const holding = L.requireInputsReleased && this.airTime >= L.smallAirTime && this.trickInputHeld(input);
     const whipErr = angleToTurn(this.whipAngle) / DEG;
     const barErr = angleToTurn(this.barAngle) / DEG;
     const variation = Math.max(...VARIATIONS.map((v) => this.varBlend[v]));
     const impact = Math.max(0, -this.vel.dot(n));
-    const scale = this.airTime < L.smallAirTime ? L.smallAirToleranceScale : 1;
-    const yawTol = L.yawTolerance * scale, pitchTol = L.pitchTolerance * scale;
+    // short drops and steep curved transitions (the surface normal changes under you) are more forgiving
+    const scale = (this.airTime < L.smallAirTime ? L.smallAirToleranceScale : 1) * (n.y < 0.75 ? L.steepToleranceScale : 1);
+    const yawTol = L.yawTolerance * scale, pitchTol = L.pitchTolerance * scale, rollTol = L.rollTolerance * scale;
 
     const horiz = Math.hypot(this.vel.x, this.vel.z) || 1;
     const facesUs = (n.x * this.vel.x + n.z * this.vel.z) / horiz < -L.casedSlope;
@@ -391,11 +495,13 @@ export class RiderController {
     else if (barErr > L.barTolerance) reason = 'Bars not caught — barspin unfinished';
     else if (variation > L.variationMaxBlend) reason = 'Still in the grab — let go sooner';
     else if (pitchErr > pitchTol) reason = this.noseOrTail(n);
+    else if (rollErr > rollTol) reason = 'Landed on the side — roll not recovered';
     else if (yawErr > yawTol) reason = 'Landed sideways';
     else if (impact > L.maxImpactSpeed) reason = 'Too hard — flat landing';
     const ok = reason === '';
-    const stomped = ok && yawErr <= L.stompYaw && pitchErr <= L.stompPitch;
-    return { yawErr, pitchErr, whipErr, barErr, variation, fakie, inverted, holding, impact, yawTol, pitchTol, ok, stomped, reason };
+    const stomped = ok && yawErr <= L.stompYaw && pitchErr <= L.stompPitch && rollErr <= L.stompPitch;
+    const severity = Math.max(pitchErr / pitchTol, rollErr / rollTol, yawErr / yawTol);
+    return { yawErr, pitchErr, rollErr, rollTol, severity, wheelFirst, whipErr, barErr, variation, fakie, inverted, holding, impact, yawTol, pitchTol, ok, stomped, reason };
   }
 
   private noseOrTail(n: Vector3): string {
@@ -411,7 +517,7 @@ export class RiderController {
       (input.pedal > 0.2 && !this.pedalLatched) ||
       input.brake > 0.2 ||
       Math.abs(input.barspin) > 0.2 ||
-      input.tailwhip || input.flair || input.tuck || input.superman || input.cancan
+      input.tailwhip || input.flair || input.tuck || input.superman || input.cancan || input.tabletop
     );
   }
 
@@ -419,16 +525,17 @@ export class RiderController {
     const B = TUNING.bail;
     this.bailReason = reason;
     const q = this.state === 'AIRBORNE' ? this.airQuat(new Quaternion()) : this.quat.clone();
+    const w0 = this.state === 'AIRBORNE' ? this.rot.omega.clone() : new Vector3();
     const rnd = (k: number) => (Math.random() * 2 - 1) * k;
     const bike = this.debrisBike, rider = this.debrisRider;
     bike.pos.copy(this.pos).add(new Vector3(0, 0.45, 0).applyQuaternion(q));
     bike.vel.copy(this.vel).multiplyScalar(0.85).add(new Vector3(rnd(1), B.throwUp * 0.5, rnd(1)));
     bike.quat.copy(q);
-    bike.angVel.set(rnd(B.tumbleSpin), rnd(B.tumbleSpin), rnd(B.tumbleSpin));
+    bike.angVel.set(rnd(B.tumbleSpin), rnd(B.tumbleSpin), rnd(B.tumbleSpin)).addScaledVector(w0, 0.7);
     rider.pos.copy(this.pos).add(new Vector3(0, 1.0, 0).applyQuaternion(q));
     rider.vel.copy(this.vel).multiplyScalar(1.05).add(new Vector3(rnd(1.5), B.throwUp, rnd(1.5)));
     rider.quat.copy(q);
-    rider.angVel.set(rnd(B.tumbleSpin), rnd(B.tumbleSpin * 0.5), rnd(B.tumbleSpin));
+    rider.angVel.set(rnd(B.tumbleSpin), rnd(B.tumbleSpin * 0.5), rnd(B.tumbleSpin)).addScaledVector(w0, 0.5);
     this.setState('BAILED');
     this.events.emit('bail', { reason, landing });
   }

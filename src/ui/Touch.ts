@@ -10,6 +10,8 @@ const BUTTONS: { action: Action; label: string; cls: string }[] = [
   { action: 'superman', label: 'SUPER', cls: 'g2' },
   { action: 'cancan', label: 'CAN', cls: 'g3' },
   { action: 'manual', label: 'MANUAL', cls: 'b5' },
+  { action: 'roll', label: 'ROLL', cls: 'g4' },
+  { action: 'tabletop', label: 'TABLE', cls: 'g5' },
 ];
 
 export const isTouchDevice = () =>

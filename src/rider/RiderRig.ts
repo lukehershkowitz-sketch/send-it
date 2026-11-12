@@ -23,6 +23,7 @@ const WHEEL_GEO = (() => {
 export interface PoseParams {
   crouch: number; wheelAngle: number; bar: number; whip: number;
   tuck: number; superman: number; cancan: number; feetOff: number; handsOff: number; lean: number;
+  shiftX: number; shiftZ: number; table: number; // rider body relative to the bike (m) and tabletop blend
 }
 
 /** Everything needed to draw the rider for one moment (also what replays record). */
@@ -38,7 +39,7 @@ export function makeSnapshot(): RigSnapshot {
   return {
     pos: new Vector3(), quat: new Quaternion(), bailed: false,
     bikePos: new Vector3(), bikeQuat: new Quaternion(), riderPos: new Vector3(), riderQuat: new Quaternion(),
-    pose: { crouch: 0, wheelAngle: 0, bar: 0, whip: 0, tuck: 0, superman: 0, cancan: 0, feetOff: 0, handsOff: 0, lean: 0 },
+    pose: { crouch: 0, wheelAngle: 0, bar: 0, whip: 0, tuck: 0, superman: 0, cancan: 0, feetOff: 0, handsOff: 0, lean: 0, shiftX: 0, shiftZ: 0, table: 0 },
     speed: 0, motionYaw: 0, airborne: false,
   };
 }
@@ -50,10 +51,7 @@ export function snapshot(r: RiderController, alpha: number, out: RigSnapshot): R
   out.riderPos.copy(r.debrisRider.pos); out.riderQuat.copy(r.debrisRider.quat);
   out.pos.lerpVectors(r.prevPos, r.pos, alpha).add(r.visOffset);
   out.quat.slerpQuaternions(r.prevQuat, r.quat, alpha);
-  let crouch = Math.max(r.compression, r.visComp);
-  if (r.state === 'AIRBORNE') crouch = Math.max(crouch, 0.3 + 0.35 * clamp(Math.abs(r.flipVel) / 7, 0, 1));
-  if (r.state === 'GRINDING') crouch = Math.max(crouch, 0.35);
-  if (r.state === 'MANUALING') crouch = Math.max(crouch, 0.15);
+  const crouch = r.body.crouch;
   const P = out.pose;
   P.crouch = crouch;
   P.wheelAngle = r.wheelAngle;
@@ -65,6 +63,9 @@ export function snapshot(r: RiderController, alpha: number, out: RigSnapshot): R
   P.feetOff = r.feetOff;
   P.handsOff = r.handsOff;
   P.lean = r.state === 'GRINDING' ? -r.balance : 0;
+  P.shiftX = r.body.shiftX;
+  P.shiftZ = r.body.shiftZ;
+  P.table = r.body.table;
   out.speed = r.state === 'GROUNDED' ? r.speed : r.vel.length();
   out.motionYaw = r.motionYaw();
   out.airborne = r.state === 'AIRBORNE';
@@ -406,13 +407,15 @@ export class RiderRig {
     this.framePivot.updateMatrix(); this.frameInner.updateMatrix();
     this.frontPivot.updateMatrix(); this.frontInner.updateMatrix();
 
-    const c = clamp(p.crouch, -0.2, 1);
+    const c = clamp(p.crouch - 0.35 * p.table, -0.35, 1.05);
     const hip = this._hip.set(0, 0.97 - 0.32 * c, -0.2 - 0.02 * c);
     // tuck: hips up toward the bars; superman: body stretched out back, flat over the bike
     hip.lerp(this._t.set(0, 1.0, -0.08), p.tuck * 0.7);
     hip.lerp(this._t.set(0, 1.12, -0.5), p.superman);
-    hip.x += p.lean * 0.12;
-    const sh = this._sh.copy(hip).add(this._t.set(0, 0.45 - 0.1 * c, 0.2 + 0.07 * c));
+    hip.x += p.lean * 0.12 + p.shiftX;
+    hip.z += p.shiftZ;
+    hip.y += 0.07 * p.table;
+    const sh = this._sh.copy(hip).add(this._t.set(p.shiftX * 0.7, 0.45 - 0.1 * c, 0.2 + 0.07 * c + p.shiftZ * 0.8 - 0.1 * p.table));
     sh.lerp(this._a.copy(hip).add(this._t.set(0, 0.16, 0.5)), p.superman);
     sh.lerp(this._a.copy(hip).add(this._t.set(0, 0.5, 0.06)), p.tuck);
     const L = this.limbs;
@@ -460,7 +463,8 @@ export class RiderRig {
     const neckTop = this._b.copy(sh).addScaledVector(td, 0.12).add(this._t.set(0, 0.02, 0.04));
     placeSeg(L.neck, sh, neckTop, 0.05);
     this.head.position.copy(neckTop).add(this._t.set(0, 0.11, 0.03));
-    this.head.rotation.x = 0.25 + 0.25 * c + p.superman * 0.6;
+    this.head.rotation.x = 0.25 + 0.25 * c + p.superman * 0.6 - p.shiftZ * 1.2;
+    this.head.rotation.z = -p.shiftX * 1.6;
   }
 
   /** Copy the controller's interpolated state onto the rig. */

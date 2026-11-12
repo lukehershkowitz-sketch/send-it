@@ -35,6 +35,7 @@ export interface MpView {
 const LABELS: Record<Action, string> = {
   steerLeft: 'Steer / spin left', steerRight: 'Steer / spin right', pedal: 'Pedal · frontflip', brake: 'Brake · backflip',
   pop: 'Load & pop', barspinLeft: 'Barspin left', barspinRight: 'Barspin right', tailwhip: 'Tailwhip', flair: 'Flair',
+  roll: 'Roll modifier (A/D roll the bike)', tabletop: 'Tabletop',
   tuck: 'Tuck no-hander', superman: 'Superman', cancan: 'Can-can', manual: 'Manual (+brake = nose)',
   freeLook: 'Free look (hold)', restart: 'New run (hold)', pause: 'Pause', debug: 'Debug overlay', help: 'Controls help',
   camera: 'Camera mode', endRun: 'End run',

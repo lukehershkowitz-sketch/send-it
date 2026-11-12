@@ -20,11 +20,23 @@ export class ChaseCam {
   private speedBlend = 0;
   private freeYaw = 0;
   private freePitch = 0;
+  private bigAir = 0;
+  private shake = 0;
+  private shakeV = 0;
+  private fovKick = 0;
+  private fovKickV = 0;
   private pos = new Vector3();
   private look = new Vector3();
   private initialized = false;
 
   constructor(readonly camera: PerspectiveCamera, public world: World) {}
+
+  /** A hard landing: dip the camera and punch the FOV, then let it settle (springs, never a snap). */
+  kick(impact: number) {
+    const C = TUNING.camera;
+    this.shakeV -= Math.min(C.landKickMax, impact * C.landKick) * 18;
+    this.fovKickV += Math.min(5, impact * C.landKickFov) * 14;
+  }
 
   snap(t: CamTarget) {
     this.yaw = t.motionYaw;
@@ -36,6 +48,15 @@ export class ChaseCam {
     const C = TUNING.camera;
     if (!t.bailed) this.yaw += wrapAngle(t.motionYaw - this.yaw) * dampFactor(C.yawLagRate * (t.airborne ? 0.4 : 1), dt);
     this.airBlend = damp(this.airBlend, t.airborne ? 1 : 0, t.airborne ? 2.5 : 4, dt);
+    // big jumps widen the framing, in proportion to how high above the ground we actually are
+    const gnd = this.world.groundBelow(t.pos);
+    const above = gnd ? Math.max(0, t.pos.y - gnd.point.y) : 0;
+    this.bigAir = damp(this.bigAir, t.airborne ? Math.min(1, above / C.bigAirHeight) : 0, t.airborne ? 2.2 : 3, dt);
+    // landing punch springs
+    this.shakeV += (-C.landStiffness * this.shake - C.landDamping * this.shakeV) * dt;
+    this.shake += this.shakeV * dt;
+    this.fovKickV += (-C.landStiffness * this.fovKick - C.landDamping * this.fovKickV) * dt;
+    this.fovKick += this.fovKickV * dt;
     this.speedBlend = damp(this.speedBlend, clamp(t.speed / 16, 0, 1), 2, dt);
 
     if (look.active) {
@@ -46,8 +67,8 @@ export class ChaseCam {
       this.freePitch = damp(this.freePitch, 0, C.freeLookReturnRate, dt);
     }
 
-    const dist = lerp(C.distMin, C.distMax, this.speedBlend) + C.airPullBack * this.airBlend;
-    const height = lerp(C.heightMin, C.heightMax, this.speedBlend) + C.airRaise * this.airBlend;
+    const dist = lerp(C.distMin, C.distMax, this.speedBlend) + C.airPullBack * this.airBlend + C.bigAirPull * this.bigAir;
+    const height = lerp(C.heightMin, C.heightMax, this.speedBlend) + C.airRaise * this.airBlend + C.bigAirRaise * this.bigAir;
     const elev = Math.atan2(height, dist) + this.freePitch;
     const r = Math.hypot(height, dist);
     const yaw = this.yaw + this.freeYaw;
@@ -57,7 +78,7 @@ export class ChaseCam {
       t.pos.y + Math.sin(elev) * r,
       t.pos.z - _fwd.z * Math.cos(elev) * r,
     );
-    _look.copy(t.pos).addScaledVector(_fwd, C.lookAhead * (1 - this.airBlend * 0.5));
+    _look.copy(t.pos).addScaledVector(_fwd, C.lookAhead * (1 - this.airBlend * 0.5) + C.airLookAhead * this.airBlend * Math.min(1, t.speed / 12));
     _look.y += C.lookHeight;
 
     if (!this.initialized) {
@@ -77,8 +98,9 @@ export class ChaseCam {
     if (g && this.pos.y < g.point.y + 0.5) this.pos.y = g.point.y + 0.5;
 
     this.camera.position.copy(this.pos);
+    this.camera.position.y += this.shake;
     this.camera.lookAt(this.look);
-    const fov = C.baseFov + C.speedFovBoost * this.speedBlend + C.airFovBoost * this.airBlend;
+    const fov = C.baseFov + C.speedFovBoost * this.speedBlend + C.airFovBoost * this.airBlend + C.bigAirFov * this.bigAir + this.fovKick;
     if (Math.abs(fov - this.camera.fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();

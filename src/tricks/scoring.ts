@@ -1,6 +1,7 @@
 import { TUNING } from '../tuning';
 import { clamp, lerp } from '../core/math';
 import type { AirData, GrindType, Variation } from '../rider/types';
+import { classifyRotation } from '../rider/aero';
 
 export type Category = 'tricks' | 'variety' | 'grinds';
 export const CATEGORY_LABELS: Record<Category, string> = {
@@ -21,13 +22,12 @@ const VAR_NAMES: Record<Variation, string> = { tuck: 'TUCK NO-HANDER', superman:
 const multiple = (n: number, word: string) =>
   n === 1 ? word : n === 2 ? `DOUBLE ${word}` : n === 3 ? `TRIPLE ${word}` : `${n}x ${word}`;
 
-/** Rounded rotation counts from an air. */
+/** Rotation of an air as named from the real rotation (see classifyRotation). */
 export function airCounts(a: AirData) {
-  const halfSpins = Math.round(Math.abs(a.spinDeg) / 180);
-  const flips = Math.round(a.flipDeg / 360);
+  const n = classifyRotation({ spinDeg: a.spinDeg, flipDeg: a.flipDeg, rollDeg: a.rollDeg, maxTiltDeg: a.maxTiltDeg, maxRollDeg: a.maxRollDeg, tableTime: a.tableTime });
   const spinDir = a.spinDeg >= 0 ? 'L' : 'R';
-  const flair = flips === 1 && halfSpins === 1;
-  return { halfSpins, flips, spinDir, flair };
+  const flair = n.kind === 'flip' && n.label === 'FLAIR';
+  return { named: n, halfSpins: n.spin / 180, flips: n.flips, spinDir, flair };
 }
 
 /** Group a whip/bar chain into runs: WHIP,WHIP,BAR → [[WHIP,2],[BAR,1]] */
@@ -47,16 +47,12 @@ function countedVariations(a: AirData): [Variation, number][] {
     .filter(([, t]) => t >= TUNING.score.varMinHold);
 }
 
-/** Human-readable name, e.g. "FAKIE 360 BACKFLIP DOUBLE TAILWHIP TO BARSPIN + SUPERMAN". */
+/** Human-readable name, e.g. "FAKIE CORK 720 DOUBLE TAILWHIP TO BARSPIN + SUPERMAN". */
 export function describeAir(a: AirData, live = false): string {
-  const { halfSpins, flips, flair } = airCounts(a);
+  const { named } = airCounts(a);
   const parts: string[] = [];
   if (a.takeoffFakie) parts.push('FAKIE');
-  if (flair) parts.push('FLAIR');
-  else {
-    if (halfSpins > 0) parts.push(String(halfSpins * 180));
-    if (flips !== 0) parts.push(multiple(Math.abs(flips), flips > 0 ? 'BACKFLIP' : 'FRONTFLIP'));
-  }
+  if (named.label) parts.push(named.label);
   const chain = runs(a.chain).map(([k, n]) => multiple(n, k === 'WHIP' ? 'TAILWHIP' : 'BARSPIN'));
   if (chain.length) parts.push(chain.join(' TO '));
   const vars = (Object.entries(a.variations) as [Variation, number][])
@@ -71,16 +67,35 @@ export function describeAir(a: AirData, live = false): string {
 /** Break an air into scoring elements (before multipliers). */
 export function airElements(a: AirData): Element[] {
   const S = TUNING.score;
-  const { halfSpins, flips, spinDir, flair } = airCounts(a);
+  const { named, halfSpins, flips, spinDir, flair } = airCounts(a);
   const f = a.takeoffFakie ? 'F:' : '';
   const els: Element[] = [];
-  if (flair) {
-    els.push({ key: `${f}flair${spinDir}`, label: 'FLAIR', base: S.flipPer360 + S.spinPer180 + S.flairBonus, cat: 'tricks' });
-  } else {
-    if (halfSpins > 0)
-      els.push({ key: `${f}spin${halfSpins * 180}${spinDir}`, label: String(halfSpins * 180), base: S.spinPer180 * halfSpins, cat: 'tricks' });
-    if (flips !== 0)
-      els.push({ key: `${f}${flips > 0 ? 'back' : 'front'}flip${Math.abs(flips)}`, label: multiple(Math.abs(flips), flips > 0 ? 'BACKFLIP' : 'FRONTFLIP'), base: S.flipPer360 * Math.abs(flips), cat: 'tricks' });
+  const flipValue = S.flipPer360 * Math.abs(flips);
+  switch (named.kind) {
+    case 'cork':
+      els.push({ key: `${f}cork${named.spin}${spinDir}`, label: named.label, base: S.corkPer180 * halfSpins + S.corkBonus, cat: 'tricks' });
+      break;
+    case 'rodeo': case 'misty': {
+      const flipShare = (Math.abs(a.flipDeg) / 360) * S.flipPer360 * S.offAxisFlipShare;
+      const bonus = named.kind === 'rodeo' ? S.rodeoBonus : S.mistyBonus;
+      els.push({ key: `${f}${named.kind}${named.spin}${spinDir}`, label: named.label, base: S.spinPer180 * halfSpins + flipShare + bonus, cat: 'tricks' });
+      break;
+    }
+    case 'roll':
+      els.push({ key: `${f}roll${named.rolls}`, label: named.label, base: S.rollPer360 * named.rolls, cat: 'tricks' });
+      break;
+    case 'tabletop':
+      els.push({ key: `${f}tabletop`, label: 'TABLETOP', base: S.tabletopBase + S.tabletopPerSec * a.tableTime, cat: 'tricks' });
+      break;
+    default:
+      if (flair) {
+        els.push({ key: `${f}flair${spinDir}`, label: 'FLAIR', base: S.flipPer360 + S.spinPer180 + S.flairBonus, cat: 'tricks' });
+      } else {
+        if (halfSpins > 0)
+          els.push({ key: `${f}spin${halfSpins * 180}${spinDir}`, label: String(halfSpins * 180), base: S.spinPer180 * halfSpins, cat: 'tricks' });
+        if (flips !== 0)
+          els.push({ key: `${f}${flips > 0 ? 'back' : 'front'}flip${Math.abs(flips)}`, label: named.label, base: flipValue, cat: 'tricks' });
+      }
   }
   for (const [k, n] of runs(a.chain)) {
     if (k === 'WHIP') els.push({ key: `${f}whip${n}`, label: multiple(n, 'TAILWHIP'), base: S.whipPer360 * n, cat: 'tricks' });
@@ -120,8 +135,8 @@ export function scoreAir(a: AirData, stomped: boolean, history: Set<string>[]): 
     }
     cats[e.cat] += e.base * k;
   }
-  const { flips } = airCounts(a);
-  const inverted = flips !== 0;
+  const { flips, named } = airCounts(a);
+  const inverted = flips !== 0 || a.maxTiltDeg >= 100 || named.kind === 'roll';
   if (inverted) { cats.tricks *= S.invertedMult; cats.variety *= S.invertedMult; }
   if (stomped) cats.grinds += (cats.tricks + cats.variety) * (S.stompMult - 1);
   const points = cats.tricks + cats.variety + cats.grinds;

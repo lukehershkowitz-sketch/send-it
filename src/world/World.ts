@@ -41,6 +41,8 @@ export interface ParkDef {
   checkpoints?: Checkpoint[];
   /** Reaching this ends the line and sends you back to the start. */
   finish?: { pos: [number, number, number]; radius: number; yaw?: number };
+  /** How much of gravity acts along slopes while rolling (default TUNING.physics.groundGravityScale). Big drops use 1 so a tall roll-in turns into real speed. */
+  groundGravityScale?: number;
   /** Run length in seconds (default TUNING.run.duration). */
   runSeconds?: number;
   decor?: {

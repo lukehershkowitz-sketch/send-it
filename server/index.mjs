@@ -7,7 +7,7 @@ import { WebSocketServer } from 'ws';
 const PARKS = new Set(['dirtline', 'skatepark', 'plaza', 'mega', 'vert', 'proto']);
 const MAX_PER_ROOM = 8;
 const TICK_HZ = 15;
-const MAX_STATE_LEN = 40;
+const MAX_STATE_LEN = 48;
 const MAX_MSGS_PER_SEC = 60;
 const HEX = /^#[0-9a-f]{6}$/i;
 const CODE = /^[a-z0-9-]{0,12}$/;

@@ -15,7 +15,8 @@ export const DEFAULT_BINDINGS: Bindings = {
     pedal: ['KeyW'], brake: ['KeyS'], pop: ['Space'],
     barspinLeft: ['ArrowLeft'], barspinRight: ['ArrowRight'],
     tailwhip: ['ArrowDown'], flair: ['ArrowUp'],
-    tuck: ['ShiftLeft', 'ShiftRight'], superman: ['KeyQ'], cancan: ['KeyE'], manual: ['KeyB'],
+    tuck: ['KeyF'], superman: ['KeyQ'], cancan: ['KeyE'], manual: ['KeyB'],
+    roll: ['ShiftLeft', 'ShiftRight'], tabletop: ['KeyT'],
     freeLook: [], restart: ['KeyR'], pause: ['Escape', 'KeyP'],
     debug: ['Backquote', 'F3'], help: ['KeyH'], camera: ['KeyC'], endRun: ['Enter'],
   },
@@ -24,13 +25,14 @@ export const DEFAULT_BINDINGS: Bindings = {
     pedal: [{ button: 7 }], brake: [{ button: 6 }], pop: [{ button: 0 }],
     barspinLeft: [{ axis: 2, dir: -1 }], barspinRight: [{ axis: 2, dir: 1 }],
     tailwhip: [{ axis: 3, dir: 1 }], flair: [{ button: 1 }],
-    tuck: [{ button: 4 }], superman: [{ button: 2 }], cancan: [{ button: 3 }], manual: [{ button: 10 }],
+    tuck: [{ button: 5 }], superman: [{ button: 2 }], cancan: [{ button: 3 }], manual: [{ button: 10 }],
+    roll: [{ button: 4 }], tabletop: [{ button: 14 }],
     freeLook: [{ button: 11 }], restart: [{ button: 8 }], pause: [{ button: 9 }],
     debug: [], help: [], camera: [{ button: 12 }], endRun: [{ button: 13 }],
   },
 };
 
-const STORAGE_KEY = 'sendit.bindings.v1';
+const STORAGE_KEY = 'sendit.bindings.v2';
 
 export function loadBindings(): Bindings {
   const b: Bindings = structuredClone(DEFAULT_BINDINGS);

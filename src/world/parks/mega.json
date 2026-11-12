@@ -1,10 +1,11 @@
 {
   "name": "Mega Ramp",
+  "groundGravityScale": 1,
   "spawn": {
     "pos": [
       0,
-      11,
-      -60.29771707969319
+      14,
+      -58.19709446506406
     ],
     "yaw": 0,
     "speed": 3
@@ -13,7 +14,7 @@
     "pos": [
       0,
       0,
-      28.405468268868958
+      24.32701281514655
     ],
     "radius": 7,
     "yaw": 180
@@ -44,13 +45,13 @@
         0,
         -70
       ],
-      "height": 11,
-      "slope": 32,
+      "height": 14,
+      "slope": 34,
       "width": 7,
       "deck": 6,
       "faceAngle": 55,
       "knuckleRadius": 5,
-      "transitionRadius": 12,
+      "transitionRadius": 14,
       "surface": "wood"
     },
     {
@@ -58,10 +59,10 @@
       "pos": [
         0,
         0,
-        -21.819365702341898
+        -15.632357958171156
       ],
-      "height": 3.2,
-      "angle": 30,
+      "height": 5.5,
+      "angle": 56,
       "width": 6,
       "surface": "wood"
     },
@@ -70,15 +71,15 @@
       "pos": [
         0,
         0,
-        6.323196881878513
+        -0.2883623987663313
       ],
-      "height": 3.6,
-      "slope": 24,
+      "height": 4.6,
+      "slope": 26,
       "width": 10,
       "deck": 0.5,
       "faceAngle": 55,
       "knuckleRadius": 4,
-      "transitionRadius": 10,
+      "transitionRadius": 11,
       "surface": "wood"
     },
     {
@@ -86,7 +87,7 @@
       "pos": [
         0,
         0,
-        42.40546826886896
+        38.327012815146546
       ],
       "height": 6,
       "radius": 5.5,

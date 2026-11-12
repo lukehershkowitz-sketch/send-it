@@ -33,7 +33,9 @@ export class DebugOverlay {
     lines.push(`compression ${f(r.compression, 2)}  last pop ${r.lastPop ? `${r.lastPop.label} ×${f(r.lastPop.factor, 2)} (${f(r.lastPop.strength, 2)} m/s)` : '—'}`);
     if (r.state === 'AIRBORNE') {
       lines.push(`airtime ${f(r.airTime, 2)} s   lands in ${r.predicted.valid ? f(r.predicted.time, 2) + ' s' : '—'}`);
-      lines.push(`spin ${f(r.spinAngle / DEG, 0)}°  flip ${f(r.flipAngle / DEG, 0)}°  pitch ${f((r.basePitch + r.flipAngle) / DEG, 0)}°  yaw ${f(r.airYaw / DEG, 0)}°`);
+      const w = r.rot.omegaB;
+      lines.push(`spin ${f(r.spinAngle / DEG, 0)}°  flip ${f(r.flipAngle / DEG, 0)}°  roll ${f(r.rollAngle / DEG, 0)}°  tilt max ${f(r.rot.maxTilt / DEG, 0)}°`);
+      lines.push(`ω pitch ${f(-w.x, 1)}  yaw ${f(w.y, 1)}  roll ${f(w.z, 1)} rad/s  inertia ×${f(r.rot.inertia, 2)}  assist ${f(r.assistCalm, 2)}`);
       lines.push(`whip ${f(r.whipAngle / DEG, 0)}°  bars ${f(r.barAngle / DEG, 0)}°  grab ${f(Math.max(r.varBlend.tuck, r.varBlend.superman, r.varBlend.cancan), 2)}  chain ${r.chain.join('→') || '—'}`);
       if (r.predicted.valid) {
         const c = r.checkLanding(r.predicted.normal, r.input);

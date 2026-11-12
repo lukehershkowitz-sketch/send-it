@@ -15,7 +15,11 @@
     "sim:vert": "tsx scripts/sim-vert.ts",
     "ride:parks": "tsx scripts/ride-parks.ts",
     "server": "node server/index.mjs",
-    "test:server": "node scripts/test-server.mjs"
+    "test:server": "node scripts/test-server.mjs",
+    "test:aero": "tsx scripts/test-aero.ts",
+    "sim:air": "tsx scripts/sim-air.ts",
+    "trace:air": "tsx scripts/trace-air.ts",
+    "test:all": "tsx scripts/test-aero.ts && tsx scripts/sim-air.ts && tsx scripts/sim.ts && tsx scripts/sim-vert.ts && tsx scripts/ride-parks.ts && tsx scripts/ride-dirtline.ts && node scripts/test-server.mjs"
   },
   "dependencies": {
     "three": "^0.187.0",

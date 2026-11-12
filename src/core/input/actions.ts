@@ -1,7 +1,7 @@
 export const ACTIONS = [
   'steerLeft', 'steerRight', 'pedal', 'brake', 'pop',
   'barspinLeft', 'barspinRight', 'tailwhip', 'flair',
-  'tuck', 'superman', 'cancan', 'manual',
+  'tuck', 'superman', 'cancan', 'manual', 'roll', 'tabletop',
   'freeLook', 'restart', 'pause', 'debug', 'help', 'camera', 'endRun',
 ] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -19,9 +19,11 @@ export interface InputState {
   superman: boolean;
   cancan: boolean;
   manual: boolean;
+  roll: boolean;     // modifier: A/D roll the bike instead of spinning it
+  tabletop: boolean; // lay the bike over (physics-driven roll to ~80°)
 }
 
 export const emptyInput = (): InputState => ({
   steer: 0, pedal: 0, brake: 0, pop: false, barspin: 0,
-  tailwhip: false, flair: false, tuck: false, superman: false, cancan: false, manual: false,
+  tailwhip: false, flair: false, tuck: false, superman: false, cancan: false, manual: false, roll: false, tabletop: false,
 });

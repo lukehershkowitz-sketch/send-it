@@ -91,8 +91,8 @@ function enterGrind(r: RiderController, rail: NonNullable<RiderController['rail'
   r.balanceDrift = 0;
   r.compression = 0;
   r.popWasHeld = false;
-  r.spinVel = r.flipVel = 0;
-  r.visCompVel += 2;
+  r.rot.omega.set(0, 0, 0);
+  r.body.kick(2);
   r.lastLanding = null;
   r.setState('GRINDING');
   poseOnRail(r);
