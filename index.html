@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>SEND IT</title>
+  <style>
+    :root { --ink: #fff; --stomp: #ffd23f; --clean: #7cf2c6; --bail: #ff5a5f; --shadow: 0 2px 0 rgba(0,0,0,.35), 0 0 18px rgba(0,0,0,.25); }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #a9d4ee; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; }
+    #game { display: block; width: 100vw; height: 100vh; outline: none; }
+    .hidden { display: none !important; }
+
+    #brand { position: fixed; top: 14px; right: 18px; font-weight: 900; font-style: italic; letter-spacing: .04em; font-size: 22px; text-shadow: var(--shadow); }
+    #brand small { display: block; font-size: 11px; font-weight: 600; font-style: normal; opacity: .8; letter-spacing: .12em; text-align: right; }
+
+    #popup { position: fixed; left: 50%; top: 26%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; }
+    #popup-title { font-size: clamp(36px, 7vw, 72px); font-weight: 900; font-style: italic; letter-spacing: .02em; text-shadow: var(--shadow); }
+    #popup-sub { font-size: clamp(14px, 2.4vw, 22px); font-weight: 700; text-shadow: var(--shadow); margin-top: 2px; }
+    #popup.stomp #popup-title { color: var(--stomp); }
+    #popup.clean #popup-title { color: var(--clean); }
+    #popup.bail #popup-title { color: var(--bail); }
+    #popup.show { animation: pop 1.6s cubic-bezier(.2,.9,.3,1) forwards; }
+    @keyframes pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.6); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } 22% { transform: translate(-50%, -50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -62%) scale(1); } }
+
+    #pop-fx { position: fixed; left: 50%; top: 62%; transform: translateX(-50%); font-weight: 900; font-style: italic; font-size: 18px; letter-spacing: .08em; opacity: 0; pointer-events: none; text-shadow: var(--shadow); }
+    #pop-fx.perfect { color: var(--stomp); } #pop-fx.early, #pop-fx.late { color: #ffb38a; }
+    #pop-fx.show { animation: fx .8s ease-out forwards; }
+    @keyframes fx { 0% { opacity: 0; transform: translate(-50%, 6px); } 15% { opacity: 1; transform: translate(-50%, 0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -8px); } }
+
+    .bar { position: fixed; left: 50%; transform: translateX(-50%); width: 160px; height: 7px; border-radius: 4px; background: rgba(0,0,0,.35); overflow: hidden; transition: opacity .15s; opacity: 0; }
+    .bar > div { height: 100%; width: 0; background: #fff; }
+    #compress { top: 68%; } #compress-fill.full { background: var(--stomp); }
+    #restart { top: 50%; width: 220px; } #restart-fill { background: var(--bail); }
+    #restart::before { content: 'HOLD R TO RESTART'; position: absolute; top: -20px; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+    #restart { overflow: visible; }
+
+    #speedo { position: fixed; right: 22px; bottom: 18px; font-size: 44px; font-weight: 900; font-style: italic; text-shadow: var(--shadow); font-variant-numeric: tabular-nums; }
+    #speedo::after { content: ' km/h'; font-size: 14px; font-weight: 700; }
+
+    #debug { position: fixed; top: 10px; left: 10px; padding: 8px 10px; background: rgba(10,14,20,.62); border-radius: 6px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; pointer-events: none; max-width: 470px; }
+    #debug .ok { color: #7cf2a0; } #debug .bad { color: #ff7a7a; } #debug .dim { opacity: .6; } #debug u { text-decoration: none; opacity: .75; display: inline-block; margin-top: 4px; }
+
+    #help { position: fixed; left: 10px; bottom: 10px; padding: 10px 12px; background: rgba(10,14,20,.62); border-radius: 6px; font-size: 12px; line-height: 1.5; max-width: 360px; }
+    #help h3 { margin: 0 0 4px; font-size: 12px; letter-spacing: .1em; opacity: .8; }
+    #help kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 3px; background: rgba(255,255,255,.18); font: 11px ui-monospace, monospace; text-align: center; }
+    #help .note { opacity: .65; margin-top: 4px; }
+
+    #pause { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8,12,18,.55); font-size: 48px; font-weight: 900; font-style: italic; }
+    #pause small { display: block; font-size: 14px; font-weight: 600; font-style: normal; text-align: center; opacity: .8; }
+  </style>
+</head>
+<body>
+  <canvas id="game" tabindex="0"></canvas>
+  <div id="brand">SEND IT<small>PHASE 1 · FEEL PROTO</small></div>
+  <div id="popup"><div id="popup-title"></div><div id="popup-sub"></div></div>
+  <div id="pop-fx"></div>
+  <div id="compress" class="bar"><div id="compress-fill"></div></div>
+  <div id="restart" class="bar"><div id="restart-fill"></div></div>
+  <div id="speedo">0</div>
+  <div id="debug"></div>
+  <div id="help">
+    <h3>CONTROLS <span style="opacity:.6">(H to hide)</span></h3>
+    <kbd>W</kbd> pedal · <kbd>S</kbd> brake · <kbd>A</kbd><kbd>D</kbd> steer<br>
+    <kbd>Space</kbd> hold to load, release at the lip to pop<br>
+    In air: <kbd>A</kbd><kbd>D</kbd> spin · <kbd>S</kbd> backflip · <kbd>W</kbd> frontflip<br>
+    Let go of everything before you land!<br>
+    <kbd>R</kbd> hold to restart · <kbd>Esc</kbd>/<kbd>P</kbd> pause · <kbd>`</kbd> debug · right-drag free-look<br>
+    Pad: LS steer/spin · RT pedal/frontflip · LT brake/backflip · A pop · R3+RS look
+    <div class="note" id="pad-note"></div>
+  </div>
+  <div id="pause" class="hidden"><div>PAUSED<small>Esc / P to resume</small></div></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

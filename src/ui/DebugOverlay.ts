@@ -1,0 +1,56 @@
+import { TUNING } from '../tuning';
+import { DEG } from '../core/math';
+import type { RiderController } from '../rider/RiderController';
+
+const ok = (b: boolean) => (b ? 'ok' : 'bad');
+const f = (n: number, d = 1) => n.toFixed(d);
+
+/** Live numbers for tuning feel. Toggle with ` or F3. */
+export class DebugOverlay {
+  private el = document.getElementById('debug')!;
+  visible = true;
+  private acc = 0;
+  private frames = 0;
+  private fps = 0;
+
+  toggle() {
+    this.visible = !this.visible;
+    this.el.classList.toggle('hidden', !this.visible);
+  }
+
+  update(realDt: number, r: RiderController) {
+    this.frames++;
+    this.acc += realDt;
+    if (this.acc < 0.1 || !this.visible) return;
+    this.fps = this.frames / this.acc;
+    this.frames = 0;
+    this.acc = 0;
+
+    const spd = r.state === 'GROUNDED' ? r.speed : r.vel.length();
+    const lines: string[] = [];
+    lines.push(`<b>${f(this.fps, 0)} fps</b>  state <b>${r.state}</b>${r.fakie ? ' <i>FAKIE</i>' : ''}`);
+    lines.push(`speed ${f(spd)} m/s (${f(spd * 3.6, 0)} km/h)  y ${f(r.pos.y, 2)}`);
+    lines.push(`compression ${f(r.compression, 2)}  last pop ${r.lastPop ? `${r.lastPop.label} ×${f(r.lastPop.factor, 2)} (${f(r.lastPop.strength, 2)} m/s)` : '—'}`);
+    if (r.state === 'AIRBORNE') {
+      lines.push(`airtime ${f(r.airTime, 2)} s   lands in ${r.predicted.valid ? f(r.predicted.time, 2) + ' s' : '—'}`);
+      lines.push(`spin ${f(r.spinAngle / DEG, 0)}°  flip ${f(r.flipAngle / DEG, 0)}°  pitch ${f((r.basePitch + r.flipAngle) / DEG, 0)}°  yaw ${f(r.airYaw / DEG, 0)}°`);
+      if (r.predicted.valid) {
+        const c = r.checkLanding(r.predicted.normal, r.input);
+        lines.push('<u>landing check (if you touched down now)</u>');
+        lines.push(`<span class="${ok(c.yawErr <= c.yawTol)}">yaw err ${f(c.yawErr)}° / ±${f(c.yawTol, 0)}${c.fakie ? ' (fakie)' : ''}</span>`);
+        lines.push(`<span class="${ok(c.pitchErr <= c.pitchTol)}">pitch err ${f(c.pitchErr)}° / ±${f(c.pitchTol, 0)}</span>`);
+        lines.push(`<span class="${ok(!c.holding)}">inputs ${c.holding ? 'HELD' : 'released'}</span>  <span class="${ok(!c.inverted)}">${c.inverted ? 'INVERTED' : 'upright'}</span>`);
+        lines.push(`→ <b class="${ok(c.ok)}">${c.ok ? (c.stomped ? 'STOMP' : 'CLEAN') : 'BAIL: ' + c.reason}</b>`);
+      }
+    } else {
+      lines.push(`heading ${f(r.heading / DEG, 0)}°  travel ${f(r.travelYaw / DEG, 0)}°  lean ${f(r.lean / DEG, 0)}°`);
+    }
+    const l = r.lastLanding;
+    if (l) {
+      lines.push(`<u>last landing</u> <b class="${ok(l.ok)}">${l.ok ? (l.stomped ? 'STOMPED' : 'CLEAN') : 'BAIL'}</b> ${l.trick}`);
+      lines.push(`air ${f(l.airTime, 2)}s  yaw ${f(l.yawErr)}°  pitch ${f(l.pitchErr)}°  impact ${f(l.impact)} m/s${l.reason ? '  — ' + l.reason : ''}`);
+    }
+    lines.push(`<span class="dim">tolerance ±${TUNING.landing.yawTolerance}° yaw / ±${TUNING.landing.pitchTolerance}° pitch · stomp ±${TUNING.landing.stompYaw}°</span>`);
+    this.el.innerHTML = lines.join('<br>');
+  }
+}
