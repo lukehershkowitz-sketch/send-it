@@ -1,5 +1,6 @@
 import { CanvasTexture, Scene, Sprite, SpriteMaterial } from 'three';
 import { RiderRig, lerpSnapshot, makeSnapshot, type RigSnapshot } from '../rider/RiderRig';
+import { rigModelsIfLoaded, type RigModels } from '../rider/models';
 import { decodeSnapshot, type PlayerInfo } from './protocol';
 import type { World } from '../world/World';
 
@@ -13,6 +14,8 @@ class Ghost {
   lastT = 0;
   constructor(public info: PlayerInfo, scene: Scene) {
     this.rig = new RiderRig();
+    const models = rigModelsIfLoaded();
+    if (models) this.rig.useModels(models);
     this.rig.setColors(info.colors);
     this.rig.setGhost(0.72);
     this.label = nameTag(info.name, info.colors.jersey);
@@ -46,6 +49,9 @@ export class Ghosts {
       }
     }
   }
+
+  /** Models finished loading after some ghosts were created. */
+  useModels(parts: RigModels) { for (const g of this.ghosts.values()) g.rig.useModels(parts); }
 
   clear() { for (const g of this.ghosts.values()) g.dispose(this.scene); this.ghosts.clear(); }
 

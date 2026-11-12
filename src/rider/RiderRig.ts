@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { clamp } from '../core/math';
 import type { RiderController } from './RiderController';
+import type { RigModels } from './models';
 
 const V = (x: number, y: number, z: number) => new Vector3(x, y, z);
 const UPV = V(0, 1, 0);
@@ -339,6 +340,47 @@ export class RiderRig {
     }
   }
 
+  /**
+   * Swap the built-in procedural parts for Blender-built ones (see blender/build_rider.py).
+   * Unit-space parts (limbs, torso, pelvis, shoes) keep the existing per-frame stretching.
+   */
+  useModels(parts: RigModels) {
+    const meshes = (part: string) => (parts.get(part) ?? []).map((p) => new Mesh(p.geometry, this.mats[p.mat] ?? this.mats.dark));
+    const replaceChildren = (g: Object3D, keep: Object3D[], part: string) => {
+      const add = meshes(part);
+      if (!add.length) return;
+      for (const c of [...g.children]) if (!keep.includes(c)) g.remove(c);
+      g.add(...add);
+    };
+    replaceChildren(this.frameInner, [this.rearWheel], 'frame');
+    replaceChildren(this.frontInner, [this.frontWheel], 'front');
+    replaceChildren(this.rearWheel, [], 'wheel');
+    replaceChildren(this.frontWheel, [], 'wheel');
+    // stretched parts: the piece with the part's main material becomes the mesh, others ride along as children
+    const swap = (mesh: Mesh, part: string, main: string) => {
+      const ps = parts.get(part);
+      if (!ps?.length) return;
+      const primary = ps.find((p) => p.mat === main) ?? ps[0];
+      mesh.geometry = primary.geometry;
+      mesh.material = this.mats[primary.mat];
+      for (const c of [...mesh.children]) mesh.remove(c);
+      for (const p of ps) if (p !== primary) mesh.add(new Mesh(p.geometry, this.mats[p.mat]));
+    };
+    const L = this.limbs;
+    swap(L.thighL, 'thigh', 'pants'); swap(L.thighR, 'thigh', 'pants');
+    swap(L.shinL, 'shin', 'pants'); swap(L.shinR, 'shin', 'pants');
+    swap(L.upperL, 'upper', 'shirt'); swap(L.upperR, 'upper', 'shirt');
+    swap(L.foreL, 'fore', 'shirt'); swap(L.foreR, 'fore', 'shirt');
+    swap(this.torso, 'torso', 'shirt');
+    swap(this.pelvis, 'pelvis', 'pants');
+    for (const f of this.feet) swap(f, 'shoe', 'shoe');
+    for (const h of this.hands) swap(h, 'glove', 'glove');
+    if (parts.has('helmet')) { this.head.clear(); this.head.add(...meshes('helmet')); }
+    // the Blender limbs are a bit fuller, so the elbow/knee spheres can shrink
+    this.jointScale = 0.85;
+  }
+  private jointScale = 1;
+
   /** Make this rig a see-through multiplayer ghost. */
   setGhost(opacity: number) {
     for (const m of Object.values(this.mats)) { m.transparent = true; m.opacity = opacity; }
@@ -389,7 +431,7 @@ export class RiderRig {
       solveIK(hipS, foot, 0.47, 0.46, kneePole, this._k);
       placeSeg(L[side === 0 ? 'thighL' : 'thighR'], hipS, this._k, 0.065);
       this.joints[side === 0 ? 'kneeL' : 'kneeR'].position.copy(this._k);
-      this.joints[side === 0 ? 'kneeL' : 'kneeR'].scale.setScalar(0.06);
+      this.joints[side === 0 ? 'kneeL' : 'kneeR'].scale.setScalar(0.06 * this.jointScale);
       placeSeg(L[side === 0 ? 'shinL' : 'shinR'], this._k, foot, 0.048);
       // ---- arms: grips → (barspin) let go → (tuck no-hander) thrown up and out
       const grip = this._a.set(0.34 * s, 1.05, 0.27)
@@ -401,7 +443,7 @@ export class RiderRig {
       solveIK(shS, grip, 0.3, 0.3, this._t.set(1.0 * s, -0.4, -0.6), this._k);
       placeSeg(L[side === 0 ? 'upperL' : 'upperR'], shS, this._k, 0.045);
       this.joints[side === 0 ? 'elbowL' : 'elbowR'].position.copy(this._k);
-      this.joints[side === 0 ? 'elbowL' : 'elbowR'].scale.setScalar(0.043);
+      this.joints[side === 0 ? 'elbowL' : 'elbowR'].scale.setScalar(0.043 * this.jointScale);
       this.joints[side === 0 ? 'shL' : 'shR'].position.copy(shS);
       this.joints[side === 0 ? 'shL' : 'shR'].scale.setScalar(0.06);
       placeSeg(L[side === 0 ? 'foreL' : 'foreR'], this._k, grip, 0.038);
@@ -411,7 +453,7 @@ export class RiderRig {
     const tl = td.length();
     this.torso.position.copy(hip).addScaledVector(td, 0.5);
     this.torso.quaternion.setFromUnitVectors(UPV, td.divideScalar(tl));
-    this.torso.scale.set(0.36, tl + 0.12, 0.2);
+    this.torso.scale.set(0.36, tl + 0.12, this.jointScale < 1 ? 0.24 : 0.2);
     this.pelvis.position.copy(hip);
     this.pelvis.quaternion.copy(this.torso.quaternion);
     this.pelvis.scale.set(0.3, 0.16, 0.2);

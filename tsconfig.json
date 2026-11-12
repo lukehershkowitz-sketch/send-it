@@ -10,7 +10,7 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noUnusedLocals": true,
-    "types": []
+    "types": ["vite/client"]
   },
   "include": ["src", "scripts", "vite.config.ts"]
 }

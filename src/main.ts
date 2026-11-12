@@ -11,6 +11,7 @@ import { parkById } from './world/parks';
 import { textures } from './world/textures';
 import { RiderController } from './rider/RiderController';
 import { RiderRig, makeSnapshot, snapshot } from './rider/RiderRig';
+import { loadRigModels } from './rider/models';
 import { Recorder, ReplayPlayer } from './replay/Replay';
 import { TouchControls, isTouchDevice } from './ui/Touch';
 import type { RunSummary } from './tricks/Run';
@@ -81,6 +82,13 @@ const touch = isTouchDevice() ? new TouchControls(document.body) : null;
 graphics.setSun(decor.sun, lighting === 'night');
 graphics.setQuality(qualityFor(settings));
 applyHemi();
+// Blender-built rider + bike (falls back to the built-in parts if the file can't load)
+void loadRigModels().then((parts) => {
+  if (!parts) return;
+  rig.useModels(parts);
+  ghosts.useModels(parts);
+  graphics.refresh(scene);
+});
 const net = new Net();
 const ghosts = new Ghosts(scene);
 const sendSnap = makeSnapshot();
@@ -561,6 +569,6 @@ loop.start();
 
 // handy in the console while tuning: window.sendit.rider, .tuning …
 (window as unknown as { sendit: unknown }).sendit = {
-  rider, tuning: TUNING, loop, combo, chase, menu, sfx, recorder, replay, startReplay, exitReplay, net, ghosts, graphics, settings, applySettings,
+  rider, rig, tuning: TUNING, loop, combo, chase, menu, sfx, recorder, replay, startReplay, exitReplay, net, ghosts, graphics, settings, applySettings,
   get world() { return world; }, get run() { return run; }, loadPark, newRun, closeMenu,
 };
