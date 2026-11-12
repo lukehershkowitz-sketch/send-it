@@ -70,6 +70,22 @@ export function snapshot(r: RiderController, alpha: number, out: RigSnapshot): R
   return out;
 }
 
+/** Interpolate two snapshots (t = 0..1) into `out`. Doesn't blend across a bail or respawn jump. */
+export function lerpSnapshot(a: RigSnapshot, b: RigSnapshot, k: number, out: RigSnapshot): RigSnapshot {
+  const jump = a.bailed !== b.bailed || a.pos.distanceTo(b.pos) > 4;
+  const t = jump ? 0 : Math.max(0, Math.min(1, k));
+  out.bailed = a.bailed;
+  out.pos.lerpVectors(a.pos, b.pos, t); out.quat.slerpQuaternions(a.quat, b.quat, t);
+  out.bikePos.lerpVectors(a.bikePos, b.bikePos, t); out.bikeQuat.slerpQuaternions(a.bikeQuat, b.bikeQuat, t);
+  out.riderPos.lerpVectors(a.riderPos, b.riderPos, t); out.riderQuat.slerpQuaternions(a.riderQuat, b.riderQuat, t);
+  for (const key of Object.keys(out.pose) as (keyof PoseParams)[]) out.pose[key] = a.pose[key] + (b.pose[key] - a.pose[key]) * t;
+  out.speed = a.speed + (b.speed - a.speed) * t;
+  const dy = Math.atan2(Math.sin(b.motionYaw - a.motionYaw), Math.cos(b.motionYaw - a.motionYaw));
+  out.motionYaw = a.motionYaw + dy * t;
+  out.airborne = a.airborne;
+  return out;
+}
+
 export interface RigColors { frame: number; rider: number; pants: number; helmet: number }
 
 /**
@@ -314,6 +330,12 @@ export class RiderRig {
       this.hands.push(h);
       this.rider.add(f, h);
     }
+  }
+
+  /** Make this rig a see-through multiplayer ghost. */
+  setGhost(opacity: number) {
+    for (const m of Object.values(this.mats)) { m.transparent = true; m.opacity = opacity; }
+    (this.shadow.material as MeshBasicMaterial).opacity = 0.18;
   }
 
   /** Recolour the frame, jersey, pants and helmet. */

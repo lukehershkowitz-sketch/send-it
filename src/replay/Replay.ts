@@ -1,6 +1,6 @@
 import { PerspectiveCamera, Vector3 } from 'three';
-import { clamp, damp, wrapAngle } from '../core/math';
-import { makeSnapshot, type RigSnapshot } from '../rider/RiderRig';
+import { clamp, damp } from '../core/math';
+import { lerpSnapshot, makeSnapshot, type RigSnapshot } from '../rider/RiderRig';
 import type { ChaseCam, CamTarget } from '../camera/ChaseCam';
 import type { World } from '../world/World';
 
@@ -115,22 +115,8 @@ export class ReplayPlayer {
 
   private sample(): RigSnapshot {
     const f = this.time * HZ;
-    const i = Math.min(this.frames.length - 2, Math.floor(f));
-    const a = this.frames[Math.max(0, i)], b = this.frames[Math.max(0, i) + 1] ?? a;
-    const k = clamp(f - i, 0, 1);
-    const o = this.out;
-    // don't interpolate across a respawn / bail switch
-    const jump = a.bailed !== b.bailed || a.pos.distanceTo(b.pos) > 4;
-    const t = jump ? 0 : k;
-    o.bailed = a.bailed;
-    o.pos.lerpVectors(a.pos, b.pos, t); o.quat.slerpQuaternions(a.quat, b.quat, t);
-    o.bikePos.lerpVectors(a.bikePos, b.bikePos, t); o.bikeQuat.slerpQuaternions(a.bikeQuat, b.bikeQuat, t);
-    o.riderPos.lerpVectors(a.riderPos, b.riderPos, t); o.riderQuat.slerpQuaternions(a.riderQuat, b.riderQuat, t);
-    for (const key of Object.keys(o.pose) as (keyof RigSnapshot['pose'])[]) o.pose[key] = a.pose[key] + (b.pose[key] - a.pose[key]) * t;
-    o.speed = a.speed + (b.speed - a.speed) * t;
-    o.motionYaw = a.motionYaw + wrapAngle(b.motionYaw - a.motionYaw) * t;
-    o.airborne = a.airborne;
-    return o;
+    const i = Math.max(0, Math.min(this.frames.length - 2, Math.floor(f)));
+    return lerpSnapshot(this.frames[i], this.frames[i + 1] ?? this.frames[i], f - i, this.out);
   }
 
   private target(s: RigSnapshot): CamTarget {

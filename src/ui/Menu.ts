@@ -4,7 +4,7 @@ import { PALETTES, type RiderColors, type Settings } from '../core/settings';
 import type { Lighting } from '../world/decor';
 import { PARKS } from '../world/parks';
 
-export type Screen = 'main' | 'parks' | 'settings' | 'controls' | 'pause' | 'rider';
+export type Screen = 'main' | 'parks' | 'settings' | 'controls' | 'pause' | 'rider' | 'multiplayer' | 'invite';
 
 export interface MenuHandlers {
   ride(parkId: string, lighting: Lighting): void;
@@ -16,6 +16,20 @@ export interface MenuHandlers {
   sound(): void;
   replay(): void;
   colorsChanged(): void;
+  mpJoin(): void;
+  mpLeave(): void;
+  mpChallenge(target?: number): void;
+  duelReply(accept: boolean): void;
+}
+
+/** What the multiplayer screen shows (supplied by the game). */
+export interface MpView {
+  status: string;
+  error: string;
+  room: string | null;
+  players: { id: number; name: string; color: string; you: boolean; score?: number }[];
+  duel: string | null;
+  invite: string | null;
 }
 
 const LABELS: Record<Action, string> = {
@@ -52,6 +66,8 @@ export class Menu {
   private prevPad: boolean[] = [];
   private prevAxisY = 0;
   private prevAxisX = 0;
+  /** Set by the game to fill the multiplayer screen. */
+  mpView: () => MpView = () => ({ status: 'offline', error: '', room: null, players: [], duel: null, invite: null });
 
   constructor(private root: HTMLElement, private settings: Settings, private bindings: Bindings, private h: MenuHandlers) {
     this.lighting = settings.lighting;
@@ -71,6 +87,32 @@ export class Menu {
     this.focus = 0;
     this.render();
     this.root.classList.remove('hidden');
+  }
+
+  /** Re-render the current screen (e.g. when the room roster changes), keeping focus. */
+  refresh() {
+    if (!this.open) return;
+    const dyn = this.root.querySelector('#mp-dyn');
+    if (this.screen === 'multiplayer' && dyn) {
+      dyn.innerHTML = this.mpDynamicHtml();
+      const items = this.items();
+      this.focus = Math.min(this.focus, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('focused', i === this.focus));
+      if ((document.activeElement as HTMLInputElement | null)?.type !== 'text') items[this.focus]?.focus();
+      return;
+    }
+    this.rerenderKeepFocus();
+  }
+
+  private mpDynamicHtml(): string {
+    const v = this.mpView();
+    const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const btn = (act: string, label: string) => `<button data-nav data-act="${act}">${label}</button>`;
+    const inRoom = !!v.room;
+    return `<div class="mp-status ${v.error ? 'bad' : ''}">${esc(v.error || v.status)}${v.room ? ` · <b>${esc(v.room)}</b>` : ''}</div>
+      ${inRoom ? `<div class="mp-players">${v.players.map((p) => `<div><i style="background:${esc(p.color)}"></i>${esc(p.name)}${p.you ? ' (you)' : ''}${p.score !== undefined ? ` · <b>${p.score.toLocaleString('en-US')}</b>` : ''}</div>`).join('')}</div>` : ''}
+      ${v.duel ? `<div class="mp-status">${esc(v.duel)}</div>` : ''}
+      ${inRoom ? btn('resume', 'Ride') + btn('challenge', '1v1: best line in 60 s') + btn('mpleave', 'Leave room') : btn('mpjoin', 'Join room')}`;
   }
 
   hide() {
@@ -94,7 +136,7 @@ export class Menu {
     switch (this.screen) {
       case 'main':
         html = `<div class="title">SEND IT<small>arcade BMX</small></div>
-          ${btn('parks', 'Ride')}${btn('rider', 'Rider & bike')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}`;
+          ${btn('parks', 'Ride')}${btn('multiplayer', 'Multiplayer')}${btn('rider', 'Rider & bike')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}`;
         break;
       case 'parks':
         html = `<h2>Choose a park</h2>
@@ -103,7 +145,7 @@ export class Menu {
           ${btn('back', 'Back')}`;
         break;
       case 'pause':
-        html = `<h2>Paused</h2>${btn('resume', 'Resume')}${btn('replay', 'Watch replay')}${btn('restart', 'Restart run')}${btn('rider', 'Rider & bike')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}${btn('mainmenu', 'Main menu')}`;
+        html = `<h2>Paused</h2>${btn('resume', 'Resume')}${btn('multiplayer', 'Multiplayer')}${btn('replay', 'Watch replay')}${btn('restart', 'Restart run')}${btn('rider', 'Rider & bike')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}${btn('mainmenu', 'Main menu')}`;
         break;
       case 'settings':
         html = `<h2>Settings</h2>
@@ -117,6 +159,23 @@ export class Menu {
       case 'controls':
         html = this.controlsHtml();
         break;
+      case 'multiplayer': {
+        const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+        html = `<h2>Multiplayer</h2>
+          <label class="row">Name <input data-nav data-mp="playerName" type="text" maxlength="16" placeholder="Rider" value="${esc(s.playerName)}"></label>
+          <label class="row">Room code <input data-nav data-mp="mpCode" type="text" maxlength="12" placeholder="public" value="${esc(s.mpCode)}"></label>
+          <label class="row">Server <input data-nav data-mp="mpServer" type="text" placeholder="this site" value="${esc(s.mpServer)}"></label>
+          <p class="hint">Same park + same room code = same room. Leave the code blank for the public room.</p>
+          <div id="mp-dyn">${this.mpDynamicHtml()}</div>
+          ${btn('back', 'Back')}`;
+        break;
+      }
+      case 'invite': {
+        const v = this.mpView();
+        html = `<h2>1v1 challenge</h2><p><b>${(v.invite ?? 'Someone').replace(/</g, '&lt;')}</b> challenges you: best single line in 60 seconds.</p>
+          ${btn('accept', 'Accept')}${btn('decline', 'Decline')}`;
+        break;
+      }
       case 'rider': {
         const names: Record<keyof RiderColors, string> = { frame: 'Frame', jersey: 'Jersey', pants: 'Pants', helmet: 'Helmet' };
         html = `<h2>Rider &amp; bike</h2>
@@ -193,6 +252,12 @@ export class Menu {
     switch (a) {
       case 'parks': this.show('parks', true); break;
       case 'rider': this.show('rider', true); break;
+      case 'multiplayer': this.show('multiplayer', true); break;
+      case 'mpjoin': this.h.mpJoin(); break;
+      case 'mpleave': this.h.mpLeave(); break;
+      case 'challenge': this.h.mpChallenge(); break;
+      case 'accept': this.h.duelReply(true); break;
+      case 'decline': this.h.duelReply(false); break;
       case 'replay': this.h.replay(); break;
       case 'color': case 'cycle': {
         const part = el.dataset.part as keyof RiderColors;
@@ -247,6 +312,12 @@ export class Menu {
   }
 
   private onInput(el: HTMLInputElement) {
+    const mp = el.dataset.mp as 'playerName' | 'mpCode' | 'mpServer' | undefined;
+    if (mp) {
+      this.settings[mp] = mp === 'mpCode' ? el.value.toLowerCase().replace(/[^a-z0-9-]/g, '') : el.value;
+      this.h.settingsChanged(this.settings);
+      return;
+    }
     const k = el.dataset.set as 'volume' | 'landingAssist' | 'renderScale' | undefined;
     if (!k) return;
     this.settings[k] = Number(el.value);
@@ -277,7 +348,12 @@ export class Menu {
       ArrowLeft: () => this.adjust(-1), ArrowRight: () => this.adjust(1),
       Escape: () => this.back(), Backspace: () => this.back(),
     };
-    const isRange = (document.activeElement as HTMLInputElement | null)?.type === 'range';
+    const active = document.activeElement as HTMLInputElement | null;
+    if (active?.type === 'text' && !['ArrowUp', 'ArrowDown', 'Escape', 'Enter', 'Tab'].includes(e.code)) {
+      e.stopImmediatePropagation(); // typing: keep it away from the game, let the input have it
+      return;
+    }
+    const isRange = active?.type === 'range';
     if (nav[e.code] && !(isRange && (e.code === 'ArrowLeft' || e.code === 'ArrowRight'))) {
       e.preventDefault(); e.stopImmediatePropagation();
       nav[e.code]();
@@ -285,6 +361,7 @@ export class Menu {
       e.preventDefault(); e.stopImmediatePropagation();
       const el = this.items()[this.focus];
       if (el && !(el instanceof HTMLInputElement)) this.act(el);
+      else if (el instanceof HTMLInputElement && el.type === 'text') this.move(1);
     } else {
       e.stopImmediatePropagation(); // keep the game from seeing menu keys
     }

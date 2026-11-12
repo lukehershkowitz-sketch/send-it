@@ -120,6 +120,27 @@
     table.binds button.listening { border-color: var(--clean); animation: blink 0.8s infinite; }
     @keyframes blink { 50% { opacity: .5; } }
 
+    /* multiplayer */
+    #roster { position: fixed; left: 12px; top: 12px; padding: 8px 10px; background: rgba(10,14,20,.55); border-radius: 8px; font-size: 12px; line-height: 1.55; max-width: 220px; pointer-events: none; }
+    #debug:not(.hidden) ~ #roster { top: auto; bottom: 40px; }
+    #feed { position: fixed; left: 12px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; pointer-events: none; max-width: min(360px, 60vw); }
+    .feed-item { font-size: 13px; font-weight: 700; padding: 4px 9px; border-radius: 6px; background: rgba(10,14,20,.55); text-shadow: var(--shadow); transition: opacity .5s, transform .5s; }
+    .feed-item.bank { color: var(--clean); } .feed-item.bail { color: #ff9a9d; } .feed-item.trick { color: var(--stomp); } .feed-item.sys { opacity: .85; font-weight: 600; }
+    .feed-item.gone { opacity: 0; transform: translateX(-12px); }
+    #duel { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); padding: 8px 16px; background: rgba(10,14,20,.7); border: 2px solid var(--stomp); border-radius: 10px; text-align: center; font-size: 14px; font-weight: 800; letter-spacing: .04em; pointer-events: none; }
+    #duel small { font-weight: 600; opacity: .75; }
+    #countdown { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 140px; font-weight: 900; font-style: italic; color: var(--stomp); text-shadow: var(--shadow); opacity: 0; pointer-events: none; }
+    #countdown.show { animation: count 1s ease-out forwards; }
+    @keyframes count { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(.85); } }
+    #summary .big.win { color: var(--stomp); }
+    .mp-status { font-size: 13px; padding: 6px 4px; opacity: .9; }
+    .mp-status.bad { color: #ff9a9d; }
+    .mp-players { display: grid; gap: 3px; padding: 4px 6px 8px; font-size: 14px; }
+    .mp-players i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+    .menu-card input[type=text] { width: 58%; font: inherit; font-size: 15px; color: #fff; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.15); border-radius: 7px; padding: 7px 9px; user-select: text; -webkit-user-select: text; }
+    .menu-card input[type=text].focused, .menu-card input[type=text]:focus { border-color: var(--stomp); outline: none; }
+    body.replaying #roster, body.replaying #feed, body.replaying #duel { display: none !important; }
+
     /* rider colours */
     .swatch-row { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px; border: 2px solid transparent; font-weight: 800; outline: none; }
     .swatch-row.focused { border-color: var(--stomp); background: rgba(255,210,63,.08); }
@@ -204,6 +225,10 @@
   </div>
   <div id="vignette"></div>
   <div id="replay-bar"></div>
+  <div id="roster" class="hidden"></div>
+  <div id="feed"></div>
+  <div id="duel" class="hidden"></div>
+  <div id="countdown"></div>
   <div id="menu" class="hidden"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>

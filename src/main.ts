@@ -14,6 +14,9 @@ import { RiderRig, makeSnapshot, snapshot } from './rider/RiderRig';
 import { Recorder, ReplayPlayer } from './replay/Replay';
 import { TouchControls, isTouchDevice } from './ui/Touch';
 import type { RunSummary } from './tricks/Run';
+import { Net, defaultServerUrl } from './net/Net';
+import { Ghosts } from './net/Ghosts';
+import { encodeSnapshot } from './net/protocol';
 import type { RiderEvents } from './rider/types';
 import { ChaseCam, type CamTarget } from './camera/ChaseCam';
 import { Hud } from './ui/Hud';
@@ -72,6 +75,13 @@ const replay = new ReplayPlayer(camera, chase);
 let replayFrom: 'pause' | 'summary' = 'pause';
 let lastSummary: RunSummary | null = null;
 const touch = isTouchDevice() ? new TouchControls(document.body) : null;
+const net = new Net();
+const ghosts = new Ghosts(scene);
+const sendSnap = makeSnapshot();
+let sendAcc = 0;
+let inviteFrom: string | null = null;
+/** Active 1v1 in our room (we may be a player or a spectator). */
+let duel: { a: number; b: number; startAt: number; endAt: number; scores: Record<number, number>; me: boolean; started: boolean } | null = null;
 if (touch) { input.touch = touch.values; document.body.classList.add('touch'); }
 
 // unlock audio on the first gesture (capture phase, before the menu can swallow the event)
@@ -87,8 +97,144 @@ const menu = new Menu(document.getElementById('menu')!, settings, input.bindings
   bindingsChanged: (b) => { input.bindings = b; saveBindings(b); },
   sound: () => { sfx.unlock(); sfx.ui(); },
   replay: () => startReplay('pause'),
-  colorsChanged: () => rig.setColors(settings.colors),
+  colorsChanged: () => { rig.setColors(settings.colors); if (net.online) net.hello(playerName(), settings.colors); },
+  mpJoin: () => void mpJoin(),
+  mpLeave: () => { net.leave(); net.disconnect(); ghosts.clear(); duel = null; menu.refresh(); hud.duelBanner(null); hud.roster(null); },
+  mpChallenge: () => { net.duelRequest(); },
+  duelReply: (accept) => { net.duelReply(accept); inviteFrom = null; if (!accept) closeMenu(); else menu.show('pause'); },
 });
+
+// --------------------------------------------------------------------------- multiplayer
+const playerName = () => settings.playerName.trim() || 'Rider';
+const nameOf = (id: number) => (id === net.id ? 'You' : net.players.get(id)?.name ?? 'Rider');
+const fmtPts = (n: number) => Math.round(n).toLocaleString('en-US');
+
+async function mpJoin() {
+  try {
+    if (!net.online) await net.connect(defaultServerUrl(settings.mpServer));
+  } catch { menu.refresh(); return; }
+  net.hello(playerName(), settings.colors);
+  net.join(park.id, settings.mpCode);
+}
+
+menu.mpView = () => ({
+  status: net.status === 'online' ? (net.room ? `Connected · ${net.players.size + 1} rider${net.players.size ? 's' : ''}` : 'Connected') : net.status === 'connecting' ? 'Connecting…' : 'Not connected',
+  error: net.error,
+  room: net.room ? `${park.name} / ${net.room.code}` : null,
+  players: [
+    { id: net.id, name: `${playerName()}`, color: settings.colors.jersey, you: true, score: duel && (duel.a === net.id || duel.b === net.id) ? duel.scores[net.id] ?? 0 : undefined },
+    ...[...net.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.colors.jersey, you: false, score: duel && (duel.a === p.id || duel.b === p.id) ? duel.scores[p.id] ?? 0 : undefined })),
+  ],
+  duel: duel ? `1v1 live: ${nameOf(duel.a)} vs ${nameOf(duel.b)}` : null,
+  invite: inviteFrom,
+});
+
+function updateRoster() {
+  if (!net.room) { hud.roster(null); return; }
+  const rows = [`<b>${park.name}</b> · ${net.room.code}`, `<span style="color:${settings.colors.jersey}">●</span> ${playerName()} (you)`,
+    ...[...net.players.values()].map((p) => `<span style="color:${p.colors.jersey}">●</span> ${p.name}`)];
+  hud.roster(rows);
+}
+
+net.events.on('status', () => { menu.refresh(); updateRoster(); });
+net.events.on('message', (m) => {
+  switch (m.type) {
+    case 'welcome':
+      ghosts.clear();
+      ghosts.sync(net.players);
+      hud.feed(`Joined ${park.name} · room ${m.code}${m.players.length ? ` · ${m.players.length} other rider${m.players.length > 1 ? 's' : ''}` : ''}`, 'sys');
+      duel = m.duel ? { ...m.duel, me: false, started: true } : null;
+      break;
+    case 'join':
+      ghosts.sync(net.players);
+      hud.feed(`${m.player.name} joined`, 'sys');
+      break;
+    case 'leave':
+      ghosts.sync(net.players);
+      hud.feed('A rider left', 'sys');
+      break;
+    case 'states':
+      for (const [id, st] of m.p) if (id !== net.id) ghosts.push(id, m.t, st);
+      return; // hot path: skip the menu refresh
+    case 'event':
+      hud.feed(`${nameOf(m.id)}: ${m.text}${m.points ? ` +${fmtPts(m.points)}` : ''}`, m.kind);
+      return;
+    case 'duel_invite':
+      inviteFrom = m.name;
+      if (!menu.open) { loop.paused = true; menu.syncPad(); }
+      menu.show('invite');
+      break;
+    case 'duel_pending':
+      hud.feed(`Challenge sent. Waiting for ${m.name}…`, 'sys');
+      break;
+    case 'duel_cancel':
+      hud.feed(`1v1 off: ${m.reason}`, 'sys');
+      inviteFrom = null;
+      if (menu.open && menu.screen === 'invite') closeMenu();
+      break;
+    case 'duel_start': {
+      const me = m.a === net.id || m.b === net.id;
+      duel = { a: m.a, b: m.b, startAt: m.startAt, endAt: m.endAt, scores: { ...m.scores }, me, started: false };
+      if (me) {
+        // get everyone to the start line, frozen until the server's start time
+        if (replay.active) { replay.stop(); document.body.classList.remove('replaying'); }
+        menu.hide();
+        hud.hideSummary();
+        summaryOpen = false;
+        combo.reset();
+        rider.respawnAtStart();
+        recorder.clear();
+        snapCamera();
+        loop.paused = true;
+      } else hud.feed(`1v1 started: ${nameOf(m.a)} vs ${nameOf(m.b)}`, 'sys');
+      break;
+    }
+    case 'duel_score':
+      if (duel) duel.scores[m.id] = m.best;
+      break;
+    case 'duel_end': {
+      const wasMe = m.a === net.id || m.b === net.id;
+      const result = { you: net.id, a: { name: nameOf(m.a), id: m.a, best: m.scores[m.a] ?? 0 }, b: { name: nameOf(m.b), id: m.b, best: m.scores[m.b] ?? 0 }, winner: m.winner, reason: m.reason };
+      duel = null;
+      hud.duelBanner(null);
+      if (wasMe) {
+        if (!summaryOpen) { combo.bank(); summaryOpen = true; loop.paused = true; }
+        hud.showDuelResult(result);
+        sfx.bank(m.winner === net.id ? 6000 : 500);
+      } else hud.feed(`1v1: ${m.winner === null ? 'draw' : `${nameOf(m.winner)} wins`} (${fmtPts(result.a.best)} – ${fmtPts(result.b.best)})`, 'sys');
+      break;
+    }
+    case 'error':
+      hud.feed(m.message, 'bail');
+      break;
+  }
+  menu.refresh();
+  updateRoster();
+});
+
+/** Per frame: send our state, run the duel clock. */
+function netFrame(realDt: number) {
+  if (net.room) {
+    sendAcc += realDt;
+    if (sendAcc >= 1 / 15) { sendAcc = 0; net.sendState(encodeSnapshot(snapshot(rider, 1, sendSnap))); }
+  }
+  if (!duel) return;
+  const now = net.serverNow();
+  if (duel.me && !duel.started) {
+    if (now >= duel.startAt) {
+      duel.started = true;
+      newRun((duel.endAt - duel.startAt) / 1000);
+      hud.flash('SEND IT!', 'best single line wins');
+    }
+  }
+  const other = duel.me ? (duel.a === net.id ? duel.b : duel.a) : null;
+  const left = Math.max(0, (now < duel.startAt ? duel.endAt - duel.startAt : duel.endAt - now) / 1000);
+  const count = now < duel.startAt ? Math.ceil((duel.startAt - now) / 1000) : 0;
+  const line = duel.me
+    ? `You <b>${fmtPts(duel.scores[net.id] ?? 0)}</b> · ${nameOf(other!)} <b>${fmtPts(duel.scores[other!] ?? 0)}</b>`
+    : `${nameOf(duel.a)} <b>${fmtPts(duel.scores[duel.a] ?? 0)}</b> · ${nameOf(duel.b)} <b>${fmtPts(duel.scores[duel.b] ?? 0)}</b>`;
+  hud.duelBanner(`1v1 · BEST LINE · ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}<br>${line}${now > duel.endAt ? '<br><small>time! finishing lines…</small>' : ''}`, count);
+}
 
 // summary buttons (touch)
 document.getElementById('summary')!.addEventListener('click', (e) => {
@@ -142,6 +288,7 @@ function applySettings(s: Settings) {
 // --------------------------------------------------------------------------- park switching
 function loadPark(id: string, light: Lighting) {
   if (id === park.id && light === lighting) return;
+  if (duel?.me) return; // finish the 1v1 first
   park = parkById(id);
   lighting = light;
   decor.dispose();
@@ -154,12 +301,14 @@ function loadPark(id: string, light: Lighting) {
   chase.world = world;
   particles.setNight(lighting === 'night');
   recorder.clear();
+  if (net.room) { ghosts.clear(); net.join(park.id, settings.mpCode); }
 }
 
 // --------------------------------------------------------------------------- events
 events.on('landed', (l) => {
   hud.landed(l);
   if (l.air.airTime > 0.35) recorder.event(l.stomped ? 'STOMPED' : 'CLEAN', l.trick, l.stomped ? 'stomp' : 'clean');
+  if (l.air.airTime > 0.5 && !/^(FAKIE )?(AIR|HOP)$/.test(l.trick)) net.sendEvent('trick', l.trick);
   combo.addAir(l.air, l.stomped);
   sfx.land(l.impact, l.stomped);
   particles.dust(rider.pos, Math.min(1.5, l.impact / 9));
@@ -171,6 +320,7 @@ events.on('manualEnd', (m) => combo.addManual(m.nose, m.time));
 events.on('bail', (b) => {
   hud.bail(b.reason);
   recorder.event('BAIL', b.reason, 'bail');
+  net.sendEvent('bail', `bailed: ${b.reason}`);
   slowMo = TUNING.bail.slowMoDuration;
   combo.lose();
   run.bail();
@@ -181,7 +331,12 @@ events.on('bail', (b) => {
 events.on('respawn', () => { slowMo = 0; });
 events.on('finish', () => { pendingFinish = true; });
 combo.events.on('changed', (c) => hud.comboChanged(c));
-combo.events.on('banked', (b) => { run.bank(b); hud.banked(b); sfx.bank(b.total); recorder.event(`+${b.total.toLocaleString('en-US')}`, 'LINE BANKED', 'clean'); });
+combo.events.on('banked', (b) => {
+  run.bank(b); hud.banked(b); sfx.bank(b.total);
+  recorder.event(`+${b.total.toLocaleString('en-US')}`, 'LINE BANKED', 'clean');
+  net.sendEvent('bank', `${b.entries.length}-trick line`, b.total);
+  if (duel?.me && duel.started) net.duelLine(b.total);
+});
 combo.events.on('lost', (l) => { run.lost(l.total); if (l.total > 0) { hud.lost(l.total); sfx.lost(); } });
 
 /** End the run: bank a line you're rolling away from, drop one you're mid-trick in. */
@@ -196,12 +351,12 @@ function endRun() {
 }
 function endRunSilently() { summaryOpen = false; hud.hideSummary(); combo.reset(); }
 
-function newRun() {
+function newRun(duration?: number) {
   summaryOpen = false;
   hud.hideSummary();
   loop.paused = false;
   combo.reset();
-  run = new Run(world.def.name, world.def.runSeconds);
+  run = new Run(world.def.name, duration ?? world.def.runSeconds);
   pendingFinish = false;
   rider.respawnAtStart();
   recorder.clear();
@@ -215,12 +370,14 @@ const loop = new GameLoop(
   // once per frame, real time
   (realDt) => {
     input.poll(realDt);
+    netFrame(realDt);
     touch?.setVisible(!menu.open);
     if (replay.active) { replayControls(realDt); return; }
     if (menu.open) { menu.update(); return; }
     if (input.values.pop > 0.5 || input.padConnected) sfx.unlock();
     if (summaryOpen) {
       if (input.justPressed('camera')) startReplay('summary');
+      else if (duel?.me) { /* waiting for the 1v1 result */ }
       else if (input.justPressed('pop') || input.justPressed('endRun')) newRun();
       else if (input.justPressed('pause')) { endRunSilently(); menu.syncPad(); menu.show('main'); }
       return;
@@ -229,7 +386,7 @@ const loop = new GameLoop(
     if (input.justPressed('endRun')) { endRun(); return; }
     if (input.justPressed('debug')) { debug.toggle(); settings.showDebug = debug.visible; saveSettings(settings); }
     if (input.justPressed('help')) hud.toggleHelp();
-    if (input.held('restart')) {
+    if (input.held('restart') && !duel?.me) {
       restartHeld += realDt;
       if (restartHeld >= TUNING.input.restartHoldTime) { restartHeld = 0; newRun(); }
     } else restartHeld = 0;
@@ -286,6 +443,7 @@ const loop = new GameLoop(
     if (menu.open && menu.screen === 'rider') orbitPreview(realDt);
     else chase.update(loop.paused ? 0 : realDt, camTarget, input.look);
     decor.update(rig.root.position);
+    ghosts.update(net.serverNow() - 150, world);
     effects(simDt);
     particles.update(simDt);
     sfx.update(realDt, rider, loop.paused || menu.open);
@@ -383,6 +541,6 @@ loop.start();
 
 // handy in the console while tuning: window.sendit.rider, .tuning …
 (window as unknown as { sendit: unknown }).sendit = {
-  rider, tuning: TUNING, loop, combo, chase, menu, sfx, recorder, replay, startReplay, exitReplay,
+  rider, tuning: TUNING, loop, combo, chase, menu, sfx, recorder, replay, startReplay, exitReplay, net, ghosts,
   get world() { return world; }, get run() { return run; }, loadPark, newRun, closeMenu,
 };

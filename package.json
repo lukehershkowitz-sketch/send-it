@@ -13,14 +13,18 @@
     "ride:dirtline": "tsx scripts/ride-dirtline.ts",
     "gen:parks": "tsx scripts/gen-parks.ts",
     "sim:vert": "tsx scripts/sim-vert.ts",
-    "ride:parks": "tsx scripts/ride-parks.ts"
+    "ride:parks": "tsx scripts/ride-parks.ts",
+    "server": "node server/index.mjs",
+    "test:server": "node scripts/test-server.mjs"
   },
   "dependencies": {
-    "three": "^0.187.0"
+    "three": "^0.187.0",
+    "ws": "^8.22.2"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/three": "^0.187.0",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"

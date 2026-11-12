@@ -45,6 +45,55 @@ export class Hud {
   flash(title: string, sub: string) { this.show(title, sub, 'clean'); }
   message(title: string, sub: string, cls: string) { this.show(title, sub, cls); }
 
+  // ------------------------------------------------------------------ multiplayer
+  private feedEl = $('feed');
+  private duelEl = $('duel');
+  private rosterEl = $('roster');
+  private countEl = $('countdown');
+  private lastCount = -1;
+
+  /** Short-lived line in the room feed (other riders' tricks, joins…). */
+  feed(text: string, kind: string) {
+    const d = document.createElement('div');
+    d.className = `feed-item ${kind}`;
+    d.textContent = text;
+    this.feedEl.prepend(d);
+    while (this.feedEl.children.length > 5) this.feedEl.lastElementChild!.remove();
+    setTimeout(() => d.classList.add('gone'), 5000);
+    setTimeout(() => d.remove(), 5600);
+  }
+
+  roster(rows: string[] | null) {
+    this.rosterEl.classList.toggle('hidden', !rows);
+    if (rows) this.rosterEl.innerHTML = rows.join('<br>');
+  }
+
+  /** Duel banner (null hides it) + big 3-2-1 countdown. */
+  duelBanner(html: string | null, count = 0) {
+    this.duelEl.classList.toggle('hidden', !html);
+    if (html && this.duelEl.innerHTML !== html) this.duelEl.innerHTML = html;
+    if (count !== this.lastCount) {
+      this.lastCount = count;
+      this.countEl.textContent = count > 0 ? String(count) : '';
+      if (count > 0) this.restartAnim(this.countEl, 'show');
+    }
+  }
+
+  showDuelResult(r: { you: number; a: { name: string; id: number; best: number }; b: { name: string; id: number; best: number }; winner: number | null; reason: string | null }) {
+    const title = r.winner === null ? 'DRAW' : r.winner === r.you ? 'YOU WIN' : `${r.winner === r.a.id ? r.a.name : r.b.name} WINS`;
+    const row = (p: typeof r.a) => `<tr><td>${esc(p.name)}${p.id === r.winner ? ' 🏆' : ''}</td><td>${fmt(p.best)}</td></tr>`;
+    this.summary.innerHTML = `
+      <div class="card">
+        <h2>1v1 · BEST LINE</h2>
+        <div class="big ${r.winner === r.you ? 'win' : ''}">${esc(title)}</div>
+        ${r.reason ? `<div class="pbline">${esc(r.reason)}</div>` : ''}
+        <table>${row(r.a)}${row(r.b)}</table>
+        <div class="again">Press <kbd>Space</kbd> / <kbd>A</kbd> to ride again · <kbd>C</kbd> watch replay · <kbd>Esc</kbd> menu</div>
+        <div class="again touch-only"><button class="sum-btn" data-sum="again">Ride again</button><button class="sum-btn" data-sum="replay">Replay</button><button class="sum-btn" data-sum="menu">Menu</button></div>
+      </div>`;
+    this.summary.classList.remove('hidden');
+  }
+
   pop(p: PopInfo) {
     if (p.label === 'HOP') return;
     this.popFx.textContent = p.label === 'PERFECT' ? 'PERFECT POP' : `${p.label} POP`;
