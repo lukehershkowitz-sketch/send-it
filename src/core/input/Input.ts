@@ -15,6 +15,8 @@ export class Input {
   /** Free-look deltas this frame (radians-ish), plus whether free-look is held. */
   look = { dx: 0, dy: 0, active: false };
   padConnected = false;
+  /** Extra analog sources (touch controls), merged with max(). */
+  touch: Partial<Record<Action, number>> = {};
   private mouseDown = false;
   private mdx = 0;
   private mdy = 0;
@@ -60,6 +62,7 @@ export class Input {
           v = Math.max(v, pv);
         }
       }
+      v = Math.max(v, this.touch[a] ?? 0);
       this.values[a] = v;
     }
 

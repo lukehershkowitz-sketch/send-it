@@ -1,0 +1,62 @@
+{
+  "name": "Vert",
+  "spawn": {
+    "pos": [
+      0,
+      0,
+      0
+    ],
+    "yaw": 0,
+    "speed": 11
+  },
+  "runSeconds": 60,
+  "decor": {
+    "theme": "meadow",
+    "trees": 220,
+    "rocks": 30,
+    "clear": 12,
+    "solidArea": true,
+    "lampLayout": "perimeter",
+    "lamps": 12
+  },
+  "pieces": [
+    {
+      "type": "ground",
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "size": 500
+    },
+    {
+      "type": "quarter",
+      "pos": [
+        0,
+        0,
+        2.5
+      ],
+      "height": 3.6,
+      "radius": 3.2,
+      "angle": 90,
+      "width": 12,
+      "deck": 3,
+      "surface": "wood"
+    },
+    {
+      "type": "quarter",
+      "pos": [
+        0,
+        0,
+        -2.5
+      ],
+      "yaw": 180,
+      "height": 3.6,
+      "radius": 3.2,
+      "angle": 90,
+      "width": 12,
+      "deck": 3,
+      "surface": "wood"
+    }
+  ]
+}

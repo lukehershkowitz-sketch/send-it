@@ -10,7 +10,10 @@ import { decorate, type Decor, type Lighting } from './world/decor';
 import { parkById } from './world/parks';
 import { textures } from './world/textures';
 import { RiderController } from './rider/RiderController';
-import { RiderRig } from './rider/RiderRig';
+import { RiderRig, makeSnapshot, snapshot } from './rider/RiderRig';
+import { Recorder, ReplayPlayer } from './replay/Replay';
+import { TouchControls, isTouchDevice } from './ui/Touch';
+import type { RunSummary } from './tricks/Run';
 import type { RiderEvents } from './rider/types';
 import { ChaseCam, type CamTarget } from './camera/ChaseCam';
 import { Hud } from './ui/Hud';
@@ -39,6 +42,7 @@ let decor: Decor = decorate(scene, world, renderer, lighting);
 const events = new Emitter<RiderEvents>();
 const rider = new RiderController(world, events);
 const rig = new RiderRig();
+rig.setColors(settings.colors);
 scene.add(rig.root, rig.shadow);
 const particles = new Particles(textures.radial());
 particles.setNight(lighting === 'night');
@@ -54,13 +58,21 @@ const debug = new DebugOverlay();
 if (debug.visible !== settings.showDebug) debug.toggle();
 
 const combo = new ComboTracker();
-let run = new Run(world.def.name);
+let run = new Run(world.def.name, world.def.runSeconds);
 let summaryOpen = false;
 let slowMo = 0;
 let restartHeld = 0;
 let pendingFinish = false;
 const camTarget: CamTarget = { pos: rig.root.position, speed: 0, motionYaw: 0, airborne: false, bailed: false };
 const vignette = document.getElementById('vignette')!;
+const replayBar = document.getElementById('replay-bar')!;
+const recorder = new Recorder();
+const recSnap = makeSnapshot();
+const replay = new ReplayPlayer(camera, chase);
+let replayFrom: 'pause' | 'summary' = 'pause';
+let lastSummary: RunSummary | null = null;
+const touch = isTouchDevice() ? new TouchControls(document.body) : null;
+if (touch) { input.touch = touch.values; document.body.classList.add('touch'); }
 
 // unlock audio on the first gesture (capture phase, before the menu can swallow the event)
 for (const ev of ['keydown', 'pointerdown', 'touchstart'] as const) window.addEventListener(ev, () => sfx.unlock(), true);
@@ -74,7 +86,46 @@ const menu = new Menu(document.getElementById('menu')!, settings, input.bindings
   settingsChanged: (s) => applySettings(s),
   bindingsChanged: (b) => { input.bindings = b; saveBindings(b); },
   sound: () => { sfx.unlock(); sfx.ui(); },
+  replay: () => startReplay('pause'),
+  colorsChanged: () => rig.setColors(settings.colors),
 });
+
+// summary buttons (touch)
+document.getElementById('summary')!.addEventListener('click', (e) => {
+  const act = (e.target as HTMLElement).dataset.sum;
+  if (act === 'again') newRun();
+  else if (act === 'replay') startReplay('summary');
+  else if (act === 'menu') { endRunSilently(); menu.show('main'); }
+});
+
+// --------------------------------------------------------------------------- replays
+function startReplay(from: 'pause' | 'summary') {
+  if (recorder.frames.length < 30) { hud.flash('NO REPLAY YET', 'ride a bit first'); return; }
+  replayFrom = from;
+  menu.hide();
+  hud.hideSummary();
+  loop.paused = true;
+  replay.start(recorder, world);
+  document.body.classList.add('replaying');
+}
+
+function exitReplay() {
+  replay.stop();
+  document.body.classList.remove('replaying');
+  input.flush();
+  if (replayFrom === 'summary' && lastSummary) hud.showSummary(lastSummary);
+  else openPause();
+  snapCamera();
+}
+
+function replayControls(realDt: number) {
+  if (input.justPressed('camera')) replay.cycleCamera();
+  if (input.justPressed('pop')) replay.playing = !replay.playing;
+  if (input.justPressed('brake')) replay.speed = replay.speed === 1 ? 0.35 : 1;
+  const scrub = input.values.steerRight - input.values.steerLeft;
+  if (Math.abs(scrub) > 0.1) replay.seek(scrub * realDt * 4);
+  if (input.justPressed('pause') || input.justPressed('endRun') || input.justPressed('restart')) exitReplay();
+}
 
 function openPause() { loop.paused = true; menu.syncPad(); menu.show('pause'); }
 function closeMenu() { menu.hide(); loop.paused = summaryOpen; input.flush(); }
@@ -102,11 +153,13 @@ function loadPark(id: string, light: Lighting) {
   rider.setWorld(world);
   chase.world = world;
   particles.setNight(lighting === 'night');
+  recorder.clear();
 }
 
 // --------------------------------------------------------------------------- events
 events.on('landed', (l) => {
   hud.landed(l);
+  if (l.air.airTime > 0.35) recorder.event(l.stomped ? 'STOMPED' : 'CLEAN', l.trick, l.stomped ? 'stomp' : 'clean');
   combo.addAir(l.air, l.stomped);
   sfx.land(l.impact, l.stomped);
   particles.dust(rider.pos, Math.min(1.5, l.impact / 9));
@@ -117,6 +170,7 @@ events.on('grindEnd', (g) => combo.addGrind(g.type, g.time));
 events.on('manualEnd', (m) => combo.addManual(m.nose, m.time));
 events.on('bail', (b) => {
   hud.bail(b.reason);
+  recorder.event('BAIL', b.reason, 'bail');
   slowMo = TUNING.bail.slowMoDuration;
   combo.lose();
   run.bail();
@@ -127,7 +181,7 @@ events.on('bail', (b) => {
 events.on('respawn', () => { slowMo = 0; });
 events.on('finish', () => { pendingFinish = true; });
 combo.events.on('changed', (c) => hud.comboChanged(c));
-combo.events.on('banked', (b) => { run.bank(b); hud.banked(b); sfx.bank(b.total); });
+combo.events.on('banked', (b) => { run.bank(b); hud.banked(b); sfx.bank(b.total); recorder.event(`+${b.total.toLocaleString('en-US')}`, 'LINE BANKED', 'clean'); });
 combo.events.on('lost', (l) => { run.lost(l.total); if (l.total > 0) { hud.lost(l.total); sfx.lost(); } });
 
 /** End the run: bank a line you're rolling away from, drop one you're mid-trick in. */
@@ -135,7 +189,8 @@ function endRun() {
   if (summaryOpen) return;
   if (rider.state === 'GROUNDED' || rider.state === 'MANUALING') combo.bank();
   else combo.entries = [];
-  hud.showSummary(run.finish());
+  lastSummary = run.finish();
+  hud.showSummary(lastSummary);
   summaryOpen = true;
   loop.paused = true;
 }
@@ -146,9 +201,10 @@ function newRun() {
   hud.hideSummary();
   loop.paused = false;
   combo.reset();
-  run = new Run(world.def.name);
+  run = new Run(world.def.name, world.def.runSeconds);
   pendingFinish = false;
   rider.respawnAtStart();
+  recorder.clear();
   snapCamera();
 }
 
@@ -159,10 +215,13 @@ const loop = new GameLoop(
   // once per frame, real time
   (realDt) => {
     input.poll(realDt);
+    touch?.setVisible(!menu.open);
+    if (replay.active) { replayControls(realDt); return; }
     if (menu.open) { menu.update(); return; }
     if (input.values.pop > 0.5 || input.padConnected) sfx.unlock();
     if (summaryOpen) {
-      if (input.justPressed('pop') || input.justPressed('endRun')) newRun();
+      if (input.justPressed('camera')) startReplay('summary');
+      else if (input.justPressed('pop') || input.justPressed('endRun')) newRun();
       else if (input.justPressed('pause')) { endRunSilently(); menu.syncPad(); menu.show('main'); }
       return;
     }
@@ -185,6 +244,7 @@ const loop = new GameLoop(
   (dt) => {
     const wasBailed = rider.state === 'BAILED';
     rider.step(dt, input.state);
+    recorder.step(dt, snapshot(rider, 1, recSnap));
     combo.update(dt, rider.state);
     if (wasBailed && rider.state !== 'BAILED') snapCamera();
     // finished the line: once the line has banked, roll back to the start
@@ -201,6 +261,20 @@ const loop = new GameLoop(
   },
   // render
   (alpha, realDt) => {
+    if (replay.active) {
+      const { snap, fired } = replay.update(realDt);
+      rig.apply(snap);
+      updateShadow();
+      for (const e of fired) hud.message(e.title, e.sub, e.cls);
+      const t = (x: number) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+      replayBar.innerHTML = `<b>REPLAY</b> · ${replay.mode.toUpperCase()} CAM <kbd>C</kbd> · ${t(replay.time)} / ${t(replay.duration)}${replay.playing ? '' : ' · PAUSED'}${replay.speed < 1 ? ' · SLOW-MO' : ''}
+        <span class="ctl"><kbd>Space</kbd> play/pause · <kbd>A</kbd><kbd>D</kbd> scrub · <kbd>S</kbd> slow-mo · <kbd>Esc</kbd> exit</span>
+        <div class="prog"><div style="width:${(replay.time / Math.max(0.01, replay.duration)) * 100}%"></div></div>`;
+      decor.update(rig.root.position);
+      sfx.update(realDt, rider, true);
+      renderer.render(scene, camera);
+      return;
+    }
     const simDt = loop.paused ? 0 : realDt * loop.timeScale;
     rig.sync(rider, alpha);
     updateShadow();
@@ -209,7 +283,8 @@ const loop = new GameLoop(
     camTarget.motionYaw = rider.motionYaw();
     camTarget.airborne = rider.state === 'AIRBORNE';
     camTarget.bailed = rider.state === 'BAILED';
-    chase.update(loop.paused ? 0 : realDt, camTarget, input.look);
+    if (menu.open && menu.screen === 'rider') orbitPreview(realDt);
+    else chase.update(loop.paused ? 0 : realDt, camTarget, input.look);
     decor.update(rig.root.position);
     effects(simDt);
     particles.update(simDt);
@@ -248,6 +323,15 @@ function effects(dt: number) {
     _peg.copy(rider.vel).normalize();
     particles.sparks(rider.pos.clone().add(new Vector3(0, 0.3, 0)), _peg);
   }
+}
+
+/** Slow orbit around the rider while picking colours. */
+let previewAngle = 0;
+function orbitPreview(dt: number) {
+  previewAngle += dt * 0.5;
+  const p = rig.root.position;
+  camera.position.set(p.x + Math.sin(previewAngle) * 3.2, p.y + 1.4, p.z + Math.cos(previewAngle) * 3.2);
+  camera.lookAt(p.x, p.y + 0.8, p.z);
 }
 
 function liveTrick(): string {
@@ -299,6 +383,6 @@ loop.start();
 
 // handy in the console while tuning: window.sendit.rider, .tuning …
 (window as unknown as { sendit: unknown }).sendit = {
-  rider, tuning: TUNING, loop, combo, chase, menu, sfx,
+  rider, tuning: TUNING, loop, combo, chase, menu, sfx, recorder, replay, startReplay, exitReplay,
   get world() { return world; }, get run() { return run; }, loadPark, newRun, closeMenu,
 };

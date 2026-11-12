@@ -1,0 +1,175 @@
+{
+  "name": "Street Plaza",
+  "spawn": {
+    "pos": [
+      0,
+      1.4,
+      -28
+    ],
+    "yaw": 0,
+    "speed": 5
+  },
+  "checkpoints": [],
+  "decor": {
+    "theme": "urban",
+    "trees": 80,
+    "rocks": 0,
+    "clear": 8,
+    "solidArea": true,
+    "buildings": 26,
+    "lampLayout": "perimeter",
+    "lamps": 14
+  },
+  "pieces": [
+    {
+      "type": "ground",
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "size": 500
+    },
+    {
+      "type": "block",
+      "pos": [
+        0,
+        0,
+        -32
+      ],
+      "length": 12,
+      "width": 28,
+      "height": 1.4
+    },
+    {
+      "type": "stairs",
+      "pos": [
+        -7,
+        0,
+        -20.5
+      ],
+      "steps": 8,
+      "rise": 0.175,
+      "run": 0.32,
+      "top": 0.5,
+      "width": 5
+    },
+    {
+      "type": "rail",
+      "pos": [
+        -9.8,
+        0,
+        -20.4
+      ],
+      "length": 2.6900000000000004,
+      "height": 1.95,
+      "drop": 1.4
+    },
+    {
+      "type": "rail",
+      "pos": [
+        -4.2,
+        0,
+        -20.4
+      ],
+      "length": 2.6900000000000004,
+      "height": 1.95,
+      "drop": 1.4
+    },
+    {
+      "type": "stairs",
+      "pos": [
+        7,
+        0,
+        -20.5
+      ],
+      "steps": 5,
+      "rise": 0.27999999999999997,
+      "run": 0.42,
+      "top": 0.5,
+      "width": 4
+    },
+    {
+      "type": "ledge",
+      "pos": [
+        9.4,
+        0,
+        -20.4
+      ],
+      "length": 2.13,
+      "height": 1.75,
+      "width": 0.5,
+      "drop": 1.4
+    },
+    {
+      "type": "wedge",
+      "pos": [
+        0,
+        0,
+        -16.076765806381765
+      ],
+      "yaw": 180,
+      "height": 0.7,
+      "angle": 20,
+      "deck": 0.4,
+      "width": 5
+    },
+    {
+      "type": "block",
+      "pos": [
+        0,
+        0,
+        -6
+      ],
+      "length": 5,
+      "width": 2,
+      "height": 0.25,
+      "grind": true
+    },
+    {
+      "type": "ledge",
+      "pos": [
+        -15,
+        0,
+        -9
+      ],
+      "length": 6,
+      "height": 0.45,
+      "width": 0.6
+    },
+    {
+      "type": "ledge",
+      "pos": [
+        10,
+        0,
+        -6
+      ],
+      "length": 8,
+      "height": 0.5,
+      "width": 0.7
+    },
+    {
+      "type": "rail",
+      "pos": [
+        -4,
+        0,
+        2
+      ],
+      "length": 6,
+      "height": 0.45
+    },
+    {
+      "type": "wedge",
+      "pos": [
+        6,
+        0,
+        6
+      ],
+      "yaw": 180,
+      "height": 0.8,
+      "angle": 25,
+      "deck": 2.5,
+      "width": 3
+    }
+  ]
+}

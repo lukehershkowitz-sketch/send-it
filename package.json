@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",
     "gen:dirtline": "tsx scripts/gen-dirtline.ts",
-    "ride:dirtline": "tsx scripts/ride-dirtline.ts"
+    "ride:dirtline": "tsx scripts/ride-dirtline.ts",
+    "gen:parks": "tsx scripts/gen-parks.ts",
+    "sim:vert": "tsx scripts/sim-vert.ts",
+    "ride:parks": "tsx scripts/ride-parks.ts"
   },
   "dependencies": {
     "three": "^0.187.0"

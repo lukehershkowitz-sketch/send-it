@@ -1,7 +1,7 @@
 import { Quaternion, Vector3 } from 'three';
 import { TUNING } from '../../tuning';
 import type { InputState } from '../../core/input/actions';
-import { DEG, UP, clamp, damp, dirFromYaw, lerp, projectOnPlane, quatFromForwardUp, wrapAngle } from '../../core/math';
+import { DEG, UP, clamp, damp, dirFromYaw, lerp, quatFromForwardUp, tangentFromYaw, wrapAngle } from '../../core/math';
 import type { RiderController } from '../RiderController';
 import type { PopInfo, RiderState } from '../types';
 
@@ -36,9 +36,8 @@ export const Grounded = {
 
   /** Build the bike's orientation from heading + surface normal, plus lean. */
   orient(r: RiderController, lean: number) {
-    projectOnPlane(dirFromYaw(r.visualYaw(), _a), r.normal, _f);
-    if (_f.lengthSq() < 1e-6) _f.set(0, 0, 1);
-    quatFromForwardUp(_f.normalize(), r.normal, r.quat);
+    tangentFromYaw(r.visualYaw(), r.normal, _f);
+    quatFromForwardUp(_f, r.normal, r.quat);
     r.quat.multiply(_ql.setFromAxisAngle(FWD, lean));
   },
 } satisfies RiderState & { orient(r: RiderController, lean: number): void };
@@ -67,12 +66,11 @@ export function rideStep(r: RiderController, dt: number, input: InputState, mode
 
     if (mode.pedal && input.pedal > 0.05) {
       if (r.fakie) {
-        if (r.speed < R.fakieTurnSpeed) r.fakie = false; // pivot back to forward
-      } else {
-        if (r.speed < R.maxPedalSpeed)
-          r.speed = Math.min(R.maxPedalSpeed, r.speed + R.pedalAccel * input.pedal * (1 - 0.6 * sf) * dt);
-        if (dPitch > 0) r.speed += R.pumpGain * dPitch * input.pedal; // pumping a transition
+        if (r.speed < R.fakieTurnSpeed && r.normal.y > 0.9) r.fakie = false; // pivot back to forward (on flat)
+      } else if (r.speed < R.maxPedalSpeed) {
+        r.speed = Math.min(R.maxPedalSpeed, r.speed + R.pedalAccel * input.pedal * (1 - 0.6 * sf) * dt);
       }
+      if (dPitch > 0 && r.speed < R.pumpMaxSpeed) r.speed += R.pumpGain * dPitch * input.pedal; // pumping a transition (works fakie too)
     }
     if (mode.brake && input.brake > 0.05) r.speed = Math.max(0, r.speed - R.brakeDecel * input.brake * dt);
     if (r.speed > 0) r.speed = Math.max(0, r.speed - (R.rollingResistance + mode.extraDrag + R.airDrag * r.speed * r.speed) * dt);
@@ -127,8 +125,9 @@ export function rideStep(r: RiderController, dt: number, input: InputState, mode
     }
     const change = hit.normal.angleTo(r.normal);
     if (change > P.maxSlopeChangeDeg * DEG || hit.normal.y < P.minGroundNormalY) {
-      if (hit.normal.dot(tDir) > -0.2 && hit.point.y < r.pos.y) {
-        // the ground falls away beside/ahead of us (edge of a mound): roll off it
+      if (hit.normal.dot(tDir) > -0.2 && (hit.point.y < r.pos.y || tDir.y > 0.5)) {
+        // the ground falls away beside/ahead of us (edge of a mound), or we've run out of
+        // wall at the top of a quarter: leave the ground instead of crashing
         r.pos.copy(_np);
         r.takeoff(false);
         return false;
@@ -163,9 +162,7 @@ export function rideStep(r: RiderController, dt: number, input: InputState, mode
 }
 
 function travelDir(r: RiderController, out: Vector3): Vector3 {
-  projectOnPlane(dirFromYaw(r.travelYaw, _a), r.normal, out);
-  if (out.lengthSq() < 1e-6) out.copy(_a);
-  return out.normalize();
+  return tangentFromYaw(r.travelYaw, r.normal, out);
 }
 
 /** How well-timed is a release right now? Looks for a kicker lip ahead of us. */

@@ -1,10 +1,10 @@
 import { ACTIONS, type Action } from '../core/input/actions';
 import { DEFAULT_BINDINGS, type Bindings, type PadBinding } from '../core/input/bindings';
-import type { Settings } from '../core/settings';
+import { PALETTES, type RiderColors, type Settings } from '../core/settings';
 import type { Lighting } from '../world/decor';
 import { PARKS } from '../world/parks';
 
-export type Screen = 'main' | 'parks' | 'settings' | 'controls' | 'pause';
+export type Screen = 'main' | 'parks' | 'settings' | 'controls' | 'pause' | 'rider';
 
 export interface MenuHandlers {
   ride(parkId: string, lighting: Lighting): void;
@@ -14,6 +14,8 @@ export interface MenuHandlers {
   settingsChanged(s: Settings): void;
   bindingsChanged(b: Bindings): void;
   sound(): void;
+  replay(): void;
+  colorsChanged(): void;
 }
 
 const LABELS: Record<Action, string> = {
@@ -92,7 +94,7 @@ export class Menu {
     switch (this.screen) {
       case 'main':
         html = `<div class="title">SEND IT<small>arcade BMX</small></div>
-          ${btn('parks', 'Ride')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}`;
+          ${btn('parks', 'Ride')}${btn('rider', 'Rider & bike')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}`;
         break;
       case 'parks':
         html = `<h2>Choose a park</h2>
@@ -101,7 +103,7 @@ export class Menu {
           ${btn('back', 'Back')}`;
         break;
       case 'pause':
-        html = `<h2>Paused</h2>${btn('resume', 'Resume')}${btn('restart', 'Restart run')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}${btn('mainmenu', 'Main menu')}`;
+        html = `<h2>Paused</h2>${btn('resume', 'Resume')}${btn('replay', 'Watch replay')}${btn('restart', 'Restart run')}${btn('rider', 'Rider & bike')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}${btn('mainmenu', 'Main menu')}`;
         break;
       case 'settings':
         html = `<h2>Settings</h2>
@@ -115,6 +117,17 @@ export class Menu {
       case 'controls':
         html = this.controlsHtml();
         break;
+      case 'rider': {
+        const names: Record<keyof RiderColors, string> = { frame: 'Frame', jersey: 'Jersey', pants: 'Pants', helmet: 'Helmet' };
+        html = `<h2>Rider &amp; bike</h2>
+          ${(Object.keys(PALETTES) as (keyof RiderColors)[]).map((k) => `
+            <div class="swatch-row" data-nav data-act="cycle" data-part="${k}" tabindex="0"><span>${names[k]}</span>
+              <div class="swatches">${PALETTES[k].map((c) => `<button data-act="color" data-part="${k}" data-color="${c}" class="sw ${this.settings.colors[k] === c ? 'on' : ''}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>
+            </div>`).join('')}
+          <p class="hint">← → to change the selected part.</p>
+          ${btn('back', 'Done')}`;
+        break;
+      }
     }
     this.root.innerHTML = `<div class="menu-card ${this.screen}">${html}</div>`;
     this.applyFocus();
@@ -161,6 +174,15 @@ export class Menu {
     if (el instanceof HTMLInputElement && el.type === 'range') {
       el.value = String(Math.min(Number(el.max), Math.max(Number(el.min), Number(el.value) + d * Number(el.step))));
       this.onInput(el);
+    } else if (el.dataset.act === 'cycle') {
+      const part = el.dataset.part as keyof RiderColors;
+      const pal = PALETTES[part];
+      const i = (pal.indexOf(this.settings.colors[part]) + d + pal.length) % pal.length;
+      this.settings.colors[part] = pal[i];
+      this.h.settingsChanged(this.settings);
+      this.h.colorsChanged();
+      this.h.sound();
+      this.rerenderKeepFocus();
     } else if (el.dataset.act === 'lighting' || el.dataset.act === 'toggle') this.act(el);
   }
 
@@ -170,6 +192,17 @@ export class Menu {
     this.h.sound();
     switch (a) {
       case 'parks': this.show('parks', true); break;
+      case 'rider': this.show('rider', true); break;
+      case 'replay': this.h.replay(); break;
+      case 'color': case 'cycle': {
+        const part = el.dataset.part as keyof RiderColors;
+        const pal = PALETTES[part];
+        this.settings.colors[part] = el.dataset.color ?? pal[(pal.indexOf(this.settings.colors[part]) + 1) % pal.length];
+        this.h.settingsChanged(this.settings);
+        this.h.colorsChanged();
+        this.rerenderKeepFocus();
+        break;
+      }
       case 'settings': this.show('settings', true); break;
       case 'controls': case 'remap': this.show('controls', true); break;
       case 'back': this.back(); break;

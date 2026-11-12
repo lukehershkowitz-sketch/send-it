@@ -64,10 +64,11 @@ function enterGrind(r: RiderController, rail: NonNullable<RiderController['rail'
 
   // facing vs travel (horizontal)
   const travelYaw = yawOf(_travel);
-  let rel = wrapPi(r.airYaw - travelYaw);
+  _f.copy(FWD).applyQuaternion(r.quat); // world forward (air frame may be tilted off vert)
+  let rel = wrapPi(yawOf(_f) - travelYaw);
   r.grindFakie = Math.abs(rel) > Math.PI / 2;
   if (r.grindFakie) rel = wrapPi(rel - Math.PI);
-  const nosePitch = r.basePitch + r.flipAngle; // nose-up relative to horizontal
+  const nosePitch = Math.asin(clamp(_f.y, -1, 1)); // nose-up relative to horizontal
 
   // which side did we come from? (right = travel × up)
   _tmp.crossVectors(_travel, UP).normalize();

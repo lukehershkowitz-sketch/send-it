@@ -43,6 +43,7 @@ export class Hud {
 
   bail(reason: string) { this.show('BAIL', reason, 'bail'); }
   flash(title: string, sub: string) { this.show(title, sub, 'clean'); }
+  message(title: string, sub: string, cls: string) { this.show(title, sub, cls); }
 
   pop(p: PopInfo) {
     if (p.label === 'HOP') return;
@@ -130,7 +131,8 @@ export class Hud {
         <table>${rows}</table>
         <div class="stats">${plural(s.lines, 'line')} banked · ${plural(s.tricks, 'trick')} · ${plural(s.bails, 'bail')}${s.lostPoints ? ` · ${fmt(s.lostPoints)} pts lost to bails` : ''}</div>
         ${s.bestLine ? `<div class="best"><b>Best line ${fmt(s.bestLine.total)}</b><br>${s.bestLine.names.map(esc).join(' → ')}</div>` : ''}
-        <div class="again">Press <kbd>Space</kbd> / <kbd>A</kbd> to ride again</div>
+        <div class="again">Press <kbd>Space</kbd> / <kbd>A</kbd> to ride again · <kbd>C</kbd> watch replay · <kbd>Esc</kbd> menu</div>
+        <div class="again touch-only"><button class="sum-btn" data-sum="again">Ride again</button><button class="sum-btn" data-sum="replay">Replay</button><button class="sum-btn" data-sum="menu">Menu</button></div>
       </div>`;
     this.summary.classList.remove('hidden');
   }

@@ -24,6 +24,52 @@ export interface PoseParams {
   tuck: number; superman: number; cancan: number; feetOff: number; handsOff: number; lean: number;
 }
 
+/** Everything needed to draw the rider for one moment (also what replays record). */
+export interface RigSnapshot {
+  pos: Vector3; quat: Quaternion; bailed: boolean;
+  bikePos: Vector3; bikeQuat: Quaternion; riderPos: Vector3; riderQuat: Quaternion;
+  pose: PoseParams;
+  // camera hints
+  speed: number; motionYaw: number; airborne: boolean;
+}
+
+export function makeSnapshot(): RigSnapshot {
+  return {
+    pos: new Vector3(), quat: new Quaternion(), bailed: false,
+    bikePos: new Vector3(), bikeQuat: new Quaternion(), riderPos: new Vector3(), riderQuat: new Quaternion(),
+    pose: { crouch: 0, wheelAngle: 0, bar: 0, whip: 0, tuck: 0, superman: 0, cancan: 0, feetOff: 0, handsOff: 0, lean: 0 },
+    speed: 0, motionYaw: 0, airborne: false,
+  };
+}
+
+/** Read the controller into a snapshot (alpha = render interpolation). */
+export function snapshot(r: RiderController, alpha: number, out: RigSnapshot): RigSnapshot {
+  out.bailed = r.state === 'BAILED';
+  out.bikePos.copy(r.debrisBike.pos); out.bikeQuat.copy(r.debrisBike.quat);
+  out.riderPos.copy(r.debrisRider.pos); out.riderQuat.copy(r.debrisRider.quat);
+  out.pos.lerpVectors(r.prevPos, r.pos, alpha).add(r.visOffset);
+  out.quat.slerpQuaternions(r.prevQuat, r.quat, alpha);
+  let crouch = Math.max(r.compression, r.visComp);
+  if (r.state === 'AIRBORNE') crouch = Math.max(crouch, 0.3 + 0.35 * clamp(Math.abs(r.flipVel) / 7, 0, 1));
+  if (r.state === 'GRINDING') crouch = Math.max(crouch, 0.35);
+  if (r.state === 'MANUALING') crouch = Math.max(crouch, 0.15);
+  const P = out.pose;
+  P.crouch = crouch;
+  P.wheelAngle = r.wheelAngle;
+  P.bar = r.barAngle;
+  P.whip = r.whipAngle;
+  P.tuck = r.varBlend.tuck;
+  P.superman = r.varBlend.superman;
+  P.cancan = r.varBlend.cancan;
+  P.feetOff = r.feetOff;
+  P.handsOff = r.handsOff;
+  P.lean = r.state === 'GRINDING' ? -r.balance : 0;
+  out.speed = r.state === 'GROUNDED' ? r.speed : r.vel.length();
+  out.motionYaw = r.motionYaw();
+  out.airborne = r.state === 'AIRBORNE';
+  return out;
+}
+
 export interface RigColors { frame: number; rider: number; pants: number; helmet: number }
 
 /**
@@ -60,7 +106,6 @@ export class RiderRig {
   private hands: Mesh[] = [];
 
   private mats: Record<string, Material>;
-  private params: PoseParams = { crouch: 0, wheelAngle: 0, bar: 0, whip: 0, tuck: 0, superman: 0, cancan: 0, feetOff: 0, handsOff: 0, lean: 0 };
 
   constructor(colors: RigColors = { frame: 0xff5a1f, rider: 0x1fb5a6, pants: 0x2b2f3a, helmet: 0xf4f4f4 }) {
     const L = (c: number) => new MeshLambertMaterial({ color: c });
@@ -271,6 +316,12 @@ export class RiderRig {
     }
   }
 
+  /** Recolour the frame, jersey, pants and helmet. */
+  setColors(c: { frame: string; jersey: string; pants: string; helmet: string }) {
+    const set = (k: string, v: string) => (this.mats[k] as MeshLambertMaterial).color.set(v);
+    set('frame', c.frame); set('shirt', c.jersey); set('pants', c.pants); set('helmet', c.helmet);
+  }
+
   // ------------------------------------------------------------------ per-frame
   private _hip = V(0, 0, 0); private _sh = V(0, 0, 0); private _a = V(0, 0, 0); private _b = V(0, 0, 0);
   private _k = V(0, 0, 0); private _t = V(0, 0, 0); private _q = new Quaternion();
@@ -343,33 +394,24 @@ export class RiderRig {
 
   /** Copy the controller's interpolated state onto the rig. */
   sync(r: RiderController, alpha: number) {
-    if (r.state === 'BAILED') {
+    this.apply(snapshot(r, alpha, this.snap));
+  }
+  private snap = makeSnapshot();
+
+  /** Pose the rig from a snapshot (live play or replay). */
+  apply(sn: RigSnapshot) {
+    if (sn.bailed) {
       if (!this.detached) this.detach();
-      this.bikeBody.position.copy(r.debrisBike.pos);
-      this.bikeBody.quaternion.copy(r.debrisBike.quat);
-      this.riderBody.position.copy(r.debrisRider.pos);
-      this.riderBody.quaternion.copy(r.debrisRider.quat);
+      this.bikeBody.position.copy(sn.bikePos);
+      this.bikeBody.quaternion.copy(sn.bikeQuat);
+      this.riderBody.position.copy(sn.riderPos);
+      this.riderBody.quaternion.copy(sn.riderQuat);
       return;
     }
     if (this.detached) this.reattach();
-    this.root.position.lerpVectors(r.prevPos, r.pos, alpha).add(r.visOffset);
-    this.root.quaternion.slerpQuaternions(r.prevQuat, r.quat, alpha);
-    let crouch = Math.max(r.compression, r.visComp);
-    if (r.state === 'AIRBORNE') crouch = Math.max(crouch, 0.3 + 0.35 * clamp(Math.abs(r.flipVel) / 7, 0, 1));
-    if (r.state === 'GRINDING') crouch = Math.max(crouch, 0.35);
-    if (r.state === 'MANUALING') crouch = Math.max(crouch, 0.15);
-    const P = this.params;
-    P.crouch = crouch;
-    P.wheelAngle = r.wheelAngle;
-    P.bar = r.barAngle;
-    P.whip = r.whipAngle;
-    P.tuck = r.varBlend.tuck;
-    P.superman = r.varBlend.superman;
-    P.cancan = r.varBlend.cancan;
-    P.feetOff = r.feetOff;
-    P.handsOff = r.handsOff;
-    P.lean = r.state === 'GRINDING' ? -r.balance : 0;
-    this.pose(P);
+    this.root.position.copy(sn.pos);
+    this.root.quaternion.copy(sn.quat);
+    this.pose(sn.pose);
   }
 
   private detach() {

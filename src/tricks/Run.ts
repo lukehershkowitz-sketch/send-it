@@ -17,7 +17,7 @@ export interface RunSummary {
 
 /** A timed run: totals banked lines by category; personal best per park in localStorage. */
 export class Run {
-  timeLeft = TUNING.run.duration;
+  timeLeft: number;
   score = 0;
   cats: Record<Category, number> = { tricks: 0, variety: 0, grinds: 0 };
   bestLine: RunSummary['bestLine'] = null;
@@ -27,7 +27,9 @@ export class Run {
   lostPoints = 0;
   ended = false;
 
-  constructor(readonly park: string) {}
+  constructor(readonly park: string, duration: number = TUNING.run.duration) {
+    this.timeLeft = duration;
+  }
 
   get personalBest(): number { return loadBest(this.park); }
 

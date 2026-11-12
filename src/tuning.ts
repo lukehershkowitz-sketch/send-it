@@ -12,7 +12,7 @@ export const TUNING = {
     groundSnapDist: 0.25,      // max gap below wheels that still counts as "on the ground"
     convexStick: 1.6,          // >1 = stickier over crests before the bike gets light and leaves the ground
     maxSlopeChangeDeg: 55,     // a sudden surface change bigger than this = wall
-    minGroundNormalY: 0.35,    // surfaces steeper than ~70° can't be ridden in Phase 1
+    minGroundNormalY: -0.05,   // allow riding up to (just past) vertical on transitions; walls are caught by maxSlopeChangeDeg
     wallProbeHeights: [0.25, 0.75], // forward collision rays (wheel height, bars/knee height)
     wallProbeAhead: 0.55,      // ~front wheel reach
     bikeCapsuleHeight: 0.4,    // bike body vs rails: capsule centre height…
@@ -34,7 +34,8 @@ export const TUNING = {
     gripSlow: 14,              // how fast travel direction follows the bars (carve tightness)
     gripFast: 7,               //   …at speed (lower = more drift/carve feel)
     carveScrub: 0.9,           // speed lost while the bike is sliding sideways
-    pumpGain: 2.6,             // m/s gained per radian of transition when holding pedal (pumping)
+    pumpGain: 1.5,             // m/s gained per radian of transition when holding pedal (pumping)
+    pumpMaxSpeed: 14,          // pumping stops adding speed above this
     maxLeanDeg: 24,            // visual lean into carves
     fakieTurnSpeed: 3.5,       // below this speed, pedalling while fakie pivots you back to forward
   },
@@ -69,6 +70,8 @@ export const TUNING = {
     flipSnapWindow: 35,
     flipSnapRate: 4,
     latchPedalAtTakeoff: true, // W held through the lip doesn't start a frontflip until re-pressed
+    vertNormalY: 0.25,         // leaving a surface steeper than ~75° going up = vert air (spins turn you in the wall's plane); spines (~70°) let you transfer
+    vertOutSpeed: 0.5,         // in vert air, speed away from the wall is set to this so you come back down the transition
     whipRate: 760,             // °/s tailwhip
     barRate: 900,              // °/s barspin
     flairSpinRatio: 0.5,       // flair button: spin speed as a fraction of flip speed (360 flip ↔ 180 spin)

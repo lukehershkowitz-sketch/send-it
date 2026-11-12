@@ -1,5 +1,5 @@
 import {
-  AdditiveBlending, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight, Fog, Group,
+  AdditiveBlending, Box3, BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight, Fog, Group,
   HemisphereLight, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry,
   PointLight, Quaternion, Scene, SphereGeometry, Sprite, SpriteMaterial, Vector3, type Material, type WebGLRenderer,
 } from 'three';
@@ -41,11 +41,16 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
   group.add(sun);
 
   // ---------------------------------------------------------------- materials for park pieces
-  const groundTex = keep(theme === 'forest' ? textures.forestFloor(aniso) : textures.grass(aniso));
+  const groundTex = keep(theme === 'forest' ? textures.forestFloor(aniso) : theme === 'urban' ? textures.concrete(aniso) : textures.grass(aniso));
+  const concreteTex = keep(textures.concrete(aniso)), woodTex = keep(textures.wood(aniso));
   const swap: Map<Material, Material> = new Map([
     [pieceMaterials.ground, keep(new MeshLambertMaterial({ map: groundTex }))],
     [pieceMaterials.dirtTop, keep(new MeshLambertMaterial({ map: keep(textures.dirtTop(aniso)), flatShading: true }))],
     [pieceMaterials.dirtSide, keep(new MeshLambertMaterial({ map: keep(textures.dirtSide(aniso)), flatShading: true, side: 2 }))],
+    [pieceMaterials.concrete, keep(new MeshLambertMaterial({ map: concreteTex }))],
+    [pieceMaterials.concreteSide, keep(new MeshLambertMaterial({ map: concreteTex, color: 0xd8d4cc, side: 2 }))],
+    [pieceMaterials.wood, keep(new MeshLambertMaterial({ map: woodTex }))],
+    [pieceMaterials.woodSide, keep(new MeshLambertMaterial({ color: 0x7c5a36, side: 2 }))],
   ]);
   world.root.traverse((o) => {
     const m = o as Mesh;
@@ -66,9 +71,12 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
   const nTrees = D.trees ?? 260;
   const spots: Vector3[] = [];
   const bounds = bbox(path, theme === 'forest' ? 60 : 200);
+  const area = world.bounds.clone().expandByScalar(clear);
+  const blocked = (p: Vector3, c: number) =>
+    distToPath(p, path) < c || (!!D.solidArea && p.x > area.min.x && p.x < area.max.x && p.z > area.min.z && p.z < area.max.z);
   for (let tries = 0; spots.length < nTrees && tries < nTrees * 20; tries++) {
     const p = new Vector3(bounds.x0 + rand() * (bounds.x1 - bounds.x0), 0, bounds.z0 + rand() * (bounds.z1 - bounds.z0));
-    if (distToPath(p, path) < clear + rand() * 4) continue;
+    if (blocked(p, clear + rand() * 4)) continue;
     spots.push(p);
   }
   const forest = theme === 'forest';
@@ -91,13 +99,30 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
     let x = 0, z = 0;
     for (let t = 0; t < 20; t++) {
       x = bounds.x0 + rand() * (bounds.x1 - bounds.x0); z = bounds.z0 + rand() * (bounds.z1 - bounds.z0);
-      if (distToPath(p.set(x, 0, z), path) > clear * 0.6) break;
+      if (!blocked(p.set(x, 0, z), clear * 0.6)) break;
     }
     const sc = 0.3 + rand() * 0.9;
     m.compose(p.set(x, sc * 0.3, z), q.setFromAxisAngle(new Vector3(0, 1, 0), rand() * 6), s.set(sc, sc * 0.7, sc));
     rocks.setMatrixAt(i, m);
   }
   group.add(rocks);
+
+  // ---------------------------------------------------------------- urban: buildings around the plaza
+  const nb = D.buildings ?? 0;
+  if (nb > 0) {
+    const bm = new InstancedMesh(keep(new BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), keep(new MeshLambertMaterial({ color: 0xffffff })), nb);
+    const ring = world.bounds.clone().expandByScalar(clear + 6);
+    for (let i = 0; i < nb; i++) {
+      const side = i % 4, t = rand();
+      const x = side < 2 ? ring.min.x + t * (ring.max.x - ring.min.x) : side === 2 ? ring.min.x - 8 : ring.max.x + 8;
+      const z = side >= 2 ? ring.min.z + t * (ring.max.z - ring.min.z) : side === 0 ? ring.min.z - 8 : ring.max.z + 8;
+      const w = 8 + rand() * 10, h = 6 + rand() * 18;
+      m.compose(p.set(x, 0, z), q.identity(), s.set(w, h, w));
+      bm.setMatrixAt(i, m);
+      bm.setColorAt(i, col.setHSL(0.08 + rand() * 0.06, 0.12 + rand() * 0.1, (night ? 0.18 : 0.55) + rand() * 0.15));
+    }
+    group.add(bm);
+  }
 
   // ---------------------------------------------------------------- night: lamp posts
   const lampPos: Vector3[] = [];
@@ -113,7 +138,8 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
     const poleGeo = keep(new CylinderGeometry(0.07, 0.1, 5.5, 6)), bulbGeo = keep(new SphereGeometry(0.18, 8, 6));
     const poolGeo = keep(new PlaneGeometry(12, 12).rotateX(-Math.PI / 2));
     let side = 1;
-    for (const [pt, dir] of samplePath(path, spacing)) {
+    const lampPath = D.lampLayout === 'perimeter' ? perimeter(world.bounds.clone().expandByScalar(5)) : path;
+    for (const [pt, dir] of samplePath(lampPath, spacing)) {
       const off = new Vector3(dir.z, 0, -dir.x).multiplyScalar(side * ((D.pathWidth ?? 4) / 2 + 3.5));
       side = -side;
       const base = pt.clone().add(off);
@@ -156,6 +182,11 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
 }
 
 // --------------------------------------------------------------------------- helpers
+function perimeter(b: Box3): Vector3[] {
+  const y = 0;
+  return [new Vector3(b.min.x, y, b.min.z), new Vector3(b.max.x, y, b.min.z), new Vector3(b.max.x, y, b.max.z), new Vector3(b.min.x, y, b.max.z), new Vector3(b.min.x, y, b.min.z)];
+}
+
 function distToPath(p: Vector3, path: Vector3[]): number {
   let best = Infinity;
   for (let i = 0; i < path.length - 1; i++) {

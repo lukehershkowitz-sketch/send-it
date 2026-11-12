@@ -8,6 +8,9 @@ npm run dev     # http://localhost:5173
 npm run sim            # headless scripted rides through the real controller (feel regression check)
 npm run ride:dirtline  # a bot rides the whole Dirt Line and must finish with 0 bails
 npm run gen:dirtline   # regenerate the Dirt Line layout (gaps are sized by simulation)
+npm run gen:parks      # regenerate Skatepark / Street Plaza / Mega Ramp / Vert layouts
+npm run sim:vert       # vert/halfpipe physics checks
+npm run ride:parks     # bot smoke-rides of every Phase 4 park (exits non-zero on failure)
 ```
 
 All feel/score numbers live in `src/tuning.ts`.
@@ -32,12 +35,19 @@ All feel/score numbers live in `src/tuning.ts`.
 | `src/tricks/scoring.ts` | trick naming, per-element points, repetition keys, multipliers |
 | `src/tricks/Combo.ts` | the current line: accumulate, link multiplier, bank on clean ride-away, lose on bail |
 | `src/tricks/Run.ts` | timed run, category totals, personal best per park (localStorage) |
+| `src/replay/Replay.ts` | 30 Hz recorder of rig snapshots + player with follow / orbit / fixed-tripod cameras |
+| `src/ui/Touch.ts` | on-screen stick + trick buttons (auto on touch devices, or add `?touch=1`) |
 | `scripts/sim.ts` | headless ride tests |
 
 ## Parks
 A park is a JSON file: `spawn`, optional `checkpoints` (you respawn rolling at the last one you passed),
 optional `finish` (reaching it banks the line and sends you back to the top), `decor`, and `pieces`
-(`ground`, `kicker`, `landing`, `rail`, `ledge`). Add it to `src/world/parks/index.ts` to make it selectable.
+(`ground`, `kicker`, `landing`, `rail`, `ledge`, `quarter`, `corner`, `funbox`, `wedge`, `stairs`, `block`;
+rails and ledges take a `drop` for handrails/hubbas). Add it to `src/world/parks/index.ts` to make it selectable.
+
+**Transitions / vert:** riding direction is `normal × heading-right`, so you can ride straight up a wall.
+Leaving a surface steeper than ~75° (`air.vertNormalY`) going up is a *vert air*: spins and flips happen in
+the wall's frame and you come back down the transition (fakie with no spin, forwards after a 180).
 
 ## Scoring
 - A line accumulates tricks (airs, grinds, manuals). It **banks** after you roll on the ground for

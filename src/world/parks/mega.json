@@ -1,0 +1,99 @@
+{
+  "name": "Mega Ramp",
+  "spawn": {
+    "pos": [
+      0,
+      11,
+      -60.29771707969319
+    ],
+    "yaw": 0,
+    "speed": 3
+  },
+  "finish": {
+    "pos": [
+      0,
+      0,
+      28.405468268868958
+    ],
+    "radius": 7,
+    "yaw": 180
+  },
+  "decor": {
+    "theme": "meadow",
+    "trees": 300,
+    "rocks": 40,
+    "clear": 14,
+    "solidArea": true,
+    "lampLayout": "perimeter",
+    "lamps": 20
+  },
+  "pieces": [
+    {
+      "type": "ground",
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "size": 600
+    },
+    {
+      "type": "landing",
+      "pos": [
+        0,
+        0,
+        -70
+      ],
+      "height": 11,
+      "slope": 32,
+      "width": 7,
+      "deck": 6,
+      "faceAngle": 55,
+      "knuckleRadius": 5,
+      "transitionRadius": 12,
+      "surface": "wood"
+    },
+    {
+      "type": "kicker",
+      "pos": [
+        0,
+        0,
+        -21.819365702341898
+      ],
+      "height": 3.2,
+      "angle": 30,
+      "width": 6,
+      "surface": "wood"
+    },
+    {
+      "type": "landing",
+      "pos": [
+        0,
+        0,
+        6.323196881878513
+      ],
+      "height": 3.6,
+      "slope": 24,
+      "width": 10,
+      "deck": 0.5,
+      "faceAngle": 55,
+      "knuckleRadius": 4,
+      "transitionRadius": 10,
+      "surface": "wood"
+    },
+    {
+      "type": "quarter",
+      "pos": [
+        0,
+        0,
+        42.40546826886896
+      ],
+      "height": 6,
+      "radius": 5.5,
+      "angle": 88,
+      "width": 12,
+      "deck": 3,
+      "surface": "wood"
+    }
+  ]
+}

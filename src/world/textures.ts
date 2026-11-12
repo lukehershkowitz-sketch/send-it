@@ -61,6 +61,25 @@ export const textures = {
     speckle(g, r, 300, 256, () => `hsl(${80 + r() * 30}, 35%, ${28 + r() * 14}%)`, 3); // weeds
   }, 11, aniso),
 
+  /** Smooth concrete with expansion joints every tile (4 m). */
+  concrete: (aniso: number) => make(256, (g, r) => {
+    g.fillStyle = '#b9b6ae'; g.fillRect(0, 0, 256, 256);
+    speckle(g, r, 3200, 256, () => `hsl(${35 + r() * 20}, ${4 + r() * 6}%, ${62 + r() * 14}%)`, 2);
+    for (let i = 0; i < 18; i++) { g.fillStyle = `rgba(80,80,80,${0.04 + r() * 0.05})`; g.beginPath(); g.arc(r() * 256, r() * 256, 8 + r() * 30, 0, 7); g.fill(); }
+    g.strokeStyle = 'rgba(70,70,70,0.45)'; g.lineWidth = 2; g.strokeRect(1, 1, 254, 254);
+  }, 13, aniso),
+
+  /** Plywood ramp surface: long planks along the riding direction. */
+  wood: (aniso: number) => make(256, (g, r) => {
+    g.fillStyle = '#c99d64'; g.fillRect(0, 0, 256, 256);
+    for (let x = 0; x < 256; x += 32) {
+      g.fillStyle = `hsl(${30 + r() * 6}, ${42 + r() * 10}%, ${55 + r() * 8}%)`; g.fillRect(x, 0, 32, 256);
+      for (let k = 0; k < 14; k++) { g.strokeStyle = `rgba(120,80,40,${0.08 + r() * 0.1})`; g.beginPath(); const y = r() * 256; g.moveTo(x, y); g.bezierCurveTo(x + 10, y + 20, x + 22, y - 15, x + 32, y + r() * 10); g.stroke(); }
+      g.fillStyle = 'rgba(70,45,20,0.5)'; g.fillRect(x, 0, 1.5, 256);
+    }
+    g.fillStyle = 'rgba(70,45,20,0.4)'; g.fillRect(0, 0, 256, 1.5);
+  }, 17, aniso),
+
   /** Soft radial blob (dust, light pools, halos). */
   radial: () => {
     const t = make(64, (g) => {

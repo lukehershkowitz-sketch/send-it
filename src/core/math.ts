@@ -68,3 +68,23 @@ export function segSegDistance(p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector
   _c2.copy(p2).addScaledVector(_d2, t);
   return _c1.distanceTo(_c2);
 }
+
+const _rt = new Vector3();
+/**
+ * Riding direction on a surface for a heading yaw: normal × (horizontal right vector).
+ * Unlike projecting the heading onto the surface, this stays well defined on vertical
+ * walls (heading into a wall = straight up it).
+ */
+export function tangentFromYaw(yaw: number, n: Vector3, out: Vector3): Vector3 {
+  _rt.set(-Math.cos(yaw), 0, Math.sin(yaw)); // rider's right for this yaw
+  out.crossVectors(n, _rt);
+  if (out.lengthSq() < 1e-6) projectOnPlane(dirFromYaw(yaw, out), n, out);
+  return out.normalize();
+}
+
+/** Inverse of tangentFromYaw: heading yaw for a direction of travel `t` on a surface with normal `n`. */
+export function yawFromTangent(t: Vector3, n: Vector3): number {
+  _rt.crossVectors(t, n); // right vector
+  if (Math.abs(_rt.y) > 0.9 * _rt.length()) return Math.atan2(t.x, t.z); // degenerate: riding sideways on a wall
+  return Math.atan2(_rt.z, -_rt.x);
+}

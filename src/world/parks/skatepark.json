@@ -1,0 +1,185 @@
+{
+  "name": "Skatepark",
+  "spawn": {
+    "pos": [
+      0,
+      0,
+      -15
+    ],
+    "yaw": 0,
+    "speed": 6
+  },
+  "decor": {
+    "theme": "urban",
+    "trees": 160,
+    "rocks": 0,
+    "clear": 10,
+    "solidArea": true,
+    "lampLayout": "perimeter",
+    "lamps": 14
+  },
+  "pieces": [
+    {
+      "type": "ground",
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "size": 500
+    },
+    {
+      "type": "quarter",
+      "pos": [
+        0,
+        0,
+        22
+      ],
+      "yaw": 0,
+      "height": 2.4,
+      "radius": 2.6,
+      "angle": 85,
+      "width": 14,
+      "deck": 3
+    },
+    {
+      "type": "quarter",
+      "pos": [
+        0,
+        0,
+        -22
+      ],
+      "yaw": 180,
+      "height": 2.4,
+      "radius": 2.6,
+      "angle": 85,
+      "width": 14,
+      "deck": 3
+    },
+    {
+      "type": "corner",
+      "pos": [
+        7,
+        0,
+        18
+      ],
+      "height": 2.4,
+      "radius": 2.6,
+      "angle": 85,
+      "cornerRadius": 4,
+      "deck": 3
+    },
+    {
+      "type": "quarter",
+      "pos": [
+        11,
+        0,
+        12
+      ],
+      "yaw": 90,
+      "height": 2.4,
+      "radius": 2.6,
+      "angle": 85,
+      "width": 12,
+      "deck": 3
+    },
+    {
+      "type": "quarter",
+      "pos": [
+        -14,
+        0,
+        0
+      ],
+      "yaw": -90,
+      "height": 1.8,
+      "radius": 2.2,
+      "angle": 70,
+      "width": 12,
+      "deck": 0
+    },
+    {
+      "type": "quarter",
+      "pos": [
+        -18.391206011481053,
+        0,
+        0
+      ],
+      "yaw": 90,
+      "height": 1.8,
+      "radius": 2.2,
+      "angle": 70,
+      "width": 12,
+      "deck": 0
+    },
+    {
+      "type": "funbox",
+      "pos": [
+        0,
+        0,
+        -7
+      ],
+      "height": 1.2,
+      "angle": 26,
+      "deck": 3,
+      "width": 4.5,
+      "surface": "wood"
+    },
+    {
+      "type": "rail",
+      "pos": [
+        7,
+        0,
+        -10
+      ],
+      "length": 6,
+      "height": 0.42
+    },
+    {
+      "type": "ledge",
+      "pos": [
+        -6,
+        0,
+        -12
+      ],
+      "length": 6,
+      "height": 0.45,
+      "width": 0.6
+    },
+    {
+      "type": "wedge",
+      "pos": [
+        16,
+        0,
+        -15.868284645229144
+      ],
+      "height": 0.68,
+      "angle": 20,
+      "width": 4
+    },
+    {
+      "type": "stairs",
+      "pos": [
+        16,
+        0,
+        -14
+      ],
+      "steps": 4,
+      "rise": 0.17,
+      "run": 0.34,
+      "top": 3,
+      "width": 4
+    },
+    {
+      "type": "ledge",
+      "pos": [
+        18.4,
+        0,
+        -11
+      ],
+      "length": 1.03,
+      "height": 1.03,
+      "width": 0.5,
+      "drop": 0.68
+    }
+  ]
+}

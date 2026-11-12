@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0b1326" />
   <title>SEND IT</title>
   <style>
     :root { --ink: #fff; --stomp: #ffd23f; --clean: #7cf2c6; --bail: #ff5a5f; --shadow: 0 2px 0 rgba(0,0,0,.35), 0 0 18px rgba(0,0,0,.25); }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #a9d4ee; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; }
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-tap-highlight-color: transparent; background: #a9d4ee; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; }
     #game { display: block; width: 100vw; height: 100vh; outline: none; }
     .hidden { display: none !important; }
 
@@ -98,6 +100,7 @@
     #menu { position: fixed; inset: 0; display: grid; place-items: center; background: linear-gradient(180deg, rgba(8,12,18,.35), rgba(8,12,18,.7)); padding: 16px; z-index: 10; }
     .menu-card { width: min(420px, 100%); max-height: calc(100vh - 32px); overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 22px; background: rgba(16,22,30,.88); border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.45); }
     .menu-card.controls { width: min(640px, 100%); }
+    .menu-card, #summary .card, #help { touch-action: pan-y; }
     .menu-card h2 { margin: 0 0 6px; font-size: 22px; font-weight: 900; font-style: italic; letter-spacing: .04em; }
     .menu-card .title { font-size: 64px; font-weight: 900; font-style: italic; letter-spacing: .02em; text-align: center; line-height: 1; margin-bottom: 14px; text-shadow: 0 4px 0 #ff5a1f; }
     .menu-card .title small { display: block; font-size: 13px; font-style: normal; font-weight: 700; letter-spacing: .3em; opacity: .7; text-shadow: none; margin-top: 8px; }
@@ -116,6 +119,52 @@
     table.binds button { width: 100%; padding: 6px 8px; font-size: 13px; text-align: center; }
     table.binds button.listening { border-color: var(--clean); animation: blink 0.8s infinite; }
     @keyframes blink { 50% { opacity: .5; } }
+
+    /* rider colours */
+    .swatch-row { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px; border: 2px solid transparent; font-weight: 800; outline: none; }
+    .swatch-row.focused { border-color: var(--stomp); background: rgba(255,210,63,.08); }
+    .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+    .menu-card button.sw { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); }
+    .menu-card button.sw.on { border: 3px solid #fff; box-shadow: 0 0 0 2px var(--stomp); }
+
+    /* replays */
+    #replay-bar { display: none; position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(720px, calc(100vw - 24px)); padding: 10px 14px 12px; background: rgba(10,14,20,.78); border-radius: 10px; font-size: 13px; text-align: center; z-index: 6; }
+    #replay-bar kbd { padding: 0 5px; border-radius: 3px; background: rgba(255,255,255,.2); font: 11px ui-monospace, monospace; }
+    #replay-bar .ctl { display: block; opacity: .7; font-size: 11px; margin-top: 2px; }
+    #replay-bar .prog { height: 4px; margin-top: 8px; background: rgba(255,255,255,.15); border-radius: 2px; overflow: hidden; }
+    #replay-bar .prog div { height: 100%; background: var(--stomp); }
+    body.replaying #replay-bar { display: block; }
+    body.replaying #combo, body.replaying #speedo, body.replaying #hud-tr, body.replaying #help-hint, body.replaying #compress,
+    body.replaying #balance, body.replaying #debug, body.replaying #touch, body.replaying #bank-fx { display: none !important; }
+    body.replaying::after { content: ''; position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 60px 0 rgba(0,0,0,.85), inset 0 -60px 0 rgba(0,0,0,.85); }
+
+    /* touch controls */
+    #touch { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
+    #touch.hidden { display: none; }
+    #touch .stick-zone { position: absolute; left: 0; bottom: 0; width: 45%; height: 60%; pointer-events: auto; touch-action: none; }
+    #touch .stick-base { position: absolute; left: 40px; bottom: 40px; width: 112px; height: 112px; border-radius: 50%; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.3); opacity: .6; }
+    #touch .stick-base.active { opacity: 1; bottom: auto; }
+    #touch .stick-knob { position: absolute; left: 31px; top: 31px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.55); }
+    #touch .buttons { position: absolute; right: 14px; bottom: 14px; width: 250px; height: 250px; }
+    #touch .tbtn { position: absolute; pointer-events: auto; touch-action: none; width: 58px; height: 58px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(16,22,30,.45); color: #fff; font: 800 11px system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+    #touch .tbtn.down { background: rgba(255,210,63,.55); border-color: var(--stomp); }
+    #touch .tbtn.big { width: 92px; height: 92px; right: 0; bottom: 0; font-size: 18px; background: rgba(255,90,31,.45); }
+    #touch .b1 { right: 100px; bottom: 6px; } #touch .b2 { right: 6px; bottom: 100px; } #touch .b5 { right: 92px; bottom: 92px; }
+    #touch .b3 { right: 168px; bottom: 6px; } #touch .b4 { right: 6px; bottom: 168px; }
+    #touch .g1 { right: 168px; bottom: 74px; width: 50px; height: 50px; } #touch .g2 { right: 152px; bottom: 140px; width: 50px; height: 50px; } #touch .g3 { right: 74px; bottom: 168px; width: 50px; height: 50px; }
+    #touch .pause { top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 44px; height: 44px; font-size: 14px; }
+    body.touch #help-hint { display: none; }
+    .touch-only { display: none; }
+    body.touch .touch-only { display: flex; gap: 8px; justify-content: center; }
+    .sum-btn { font: inherit; font-weight: 800; color: #fff; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.25); border-radius: 9px; padding: 10px 14px; }
+    body.touch #combo { bottom: 150px; }
+    body.touch #speedo { right: auto; left: 16px; bottom: auto; top: max(8px, env(safe-area-inset-top)); }
+    @media (max-width: 700px), (max-height: 500px) {
+      #score { font-size: 28px; } #timer { font-size: 15px; } #speedo { font-size: 30px; }
+      #popup-title { font-size: 34px; } #combo-live { font-size: 16px; } #combo-total { font-size: 22px; }
+      #combo-list .entry { font-size: 12px; }
+      .menu-card .title { font-size: 44px; }
+    }
   </style>
 </head>
 <body>
@@ -147,11 +196,14 @@
     Hop onto the rail/ledge to grind (<kbd>A</kbd><kbd>D</kbd> balance, <kbd>Space</kbd> pop off) · hold <kbd>S</kbd> to icepick<br>
     <kbd>B</kbd> manual · <kbd>B</kbd>+<kbd>S</kbd> nose manual (<kbd>W</kbd><kbd>S</kbd> balance) · hold <kbd>B</kbd> landing to link<br>
     Line banks when you ride away clean · bail = line lost<br>
-    <kbd>R</kbd> hold: new run · <kbd>Enter</kbd> end run · <kbd>Esc</kbd> pause · <kbd>`</kbd> debug<br>
+    Quarters &amp; vert: ride up, air out, <kbd>A</kbd><kbd>D</kbd> turns you in the wall (180 to come back forwards)<br>
+    <kbd>R</kbd> hold: new run · <kbd>Enter</kbd> end run · <kbd>Esc</kbd> pause (Watch replay) · <kbd>`</kbd> debug<br>
+    Replay: <kbd>C</kbd> camera (follow / orbit / fixed) · <kbd>Space</kbd> pause · <kbd>A</kbd><kbd>D</kbd> scrub · <kbd>S</kbd> slow-mo<br>
     Pad: LS steer/spin · RT/LT pedal/brake/flips · A pop · B flair · RS bars/whip · LB tuck · X/Y superman/can-can · L3 manual
     <div class="note" id="pad-note"></div>
   </div>
   <div id="vignette"></div>
+  <div id="replay-bar"></div>
   <div id="menu" class="hidden"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>

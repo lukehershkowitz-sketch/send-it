@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { TUNING } from '../../tuning';
 import type { InputState } from '../../core/input/actions';
-import { DEG, damp, wrapAngle } from '../../core/math';
+import { DEG, damp, wrapAngle, yawFromTangent } from '../../core/math';
 import type { RiderController } from '../RiderController';
 import { VARIATIONS, type LandingResult, type RiderState } from '../types';
 import { applyLatePop, Grounded } from './Grounded';
@@ -166,7 +166,7 @@ function land(r: RiderController, n: Vector3, input: InputState) {
   _vt.copy(r.vel).addScaledVector(n, -r.vel.dot(n));
   const keep = check.stomped ? L.stompSpeedKeep : L.cleanSpeedKeep;
   r.speed = _vt.length() * keep;
-  const travelYaw = Math.atan2(_vt.x, _vt.z);
+  const travelYaw = yawFromTangent(_vt.normalize(), n);
   const visYaw = r.airYaw;
   r.travelYaw = r.heading = travelYaw;
   r.fakie = check.fakie;

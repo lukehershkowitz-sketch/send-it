@@ -1,5 +1,5 @@
 import {
-  BufferGeometry, Group, Matrix4, Mesh, Object3D, Quaternion, Raycaster, Triangle, Vector3,
+  Box3, BufferGeometry, Group, Matrix4, Mesh, Object3D, Quaternion, Raycaster, Triangle, Vector3,
 } from 'three';
 import { buildPiece, type PieceDef } from './pieces';
 import { DEG, segSegDistance } from '../core/math';
@@ -28,6 +28,8 @@ export interface RailSeg {
   a: Vector3;
   b: Vector3;
   radius: number;
+  /** Ramp coping: grindable, but riding/airing past it never counts as clipping it. */
+  coping?: boolean;
 }
 
 export interface Checkpoint { pos: [number, number, number]; yaw: number; speed?: number }
@@ -38,9 +40,15 @@ export interface ParkDef {
   /** Respawn points along a line; you respawn at the last one you rolled past. */
   checkpoints?: Checkpoint[];
   /** Reaching this ends the line and sends you back to the start. */
-  finish?: { pos: [number, number, number]; radius: number };
+  finish?: { pos: [number, number, number]; radius: number; yaw?: number };
+  /** Run length in seconds (default TUNING.run.duration). */
+  runSeconds?: number;
   decor?: {
-    theme?: 'meadow' | 'forest';
+    theme?: 'meadow' | 'forest' | 'urban';
+    /** Keep trees out of the whole bounding box of the pieces (compact parks). */
+    solidArea?: boolean;
+    buildings?: number;
+    lampLayout?: 'path' | 'perimeter';
     trees?: number;
     rocks?: number;
     clear?: number;       // keep trees this far from the riding path
@@ -62,7 +70,10 @@ export class World {
   readonly spawnPos: Vector3;
   readonly spawnYaw: number;
   readonly checkpoints: { pos: Vector3; yaw: number; speed: number }[];
-  readonly finish: { pos: Vector3; radius: number } | null;
+  readonly finish: { pos: Vector3; radius: number; dir: Vector3 | null } | null;
+  readonly spawnSpeed: number;
+  /** Bounding box of every non-ground piece. */
+  readonly bounds = new Box3();
   /** Riding path (spawn → pieces in order), used for decor placement. */
   readonly path: Vector3[] = [];
   private rc = new Raycaster();
@@ -71,7 +82,10 @@ export class World {
     this.spawnPos = new Vector3(...def.spawn.pos);
     this.spawnYaw = def.spawn.yaw * DEG;
     this.checkpoints = (def.checkpoints ?? []).map((c) => ({ pos: new Vector3(...c.pos), yaw: c.yaw * DEG, speed: c.speed ?? 0 }));
-    this.finish = def.finish ? { pos: new Vector3(...def.finish.pos), radius: def.finish.radius } : null;
+    this.spawnSpeed = def.spawn.speed ?? 0;
+    this.finish = def.finish
+      ? { pos: new Vector3(...def.finish.pos), radius: def.finish.radius, dir: def.finish.yaw === undefined ? null : new Vector3(Math.sin(def.finish.yaw * DEG), 0, Math.cos(def.finish.yaw * DEG)) }
+      : null;
     this.path.push(this.spawnPos.clone());
     for (const p of def.pieces) {
       const m = new Matrix4().compose(
@@ -89,6 +103,7 @@ export class World {
         part.mesh.geometry.applyMatrix4(m);
         part.mesh.geometry.computeBoundingSphere();
         part.mesh.geometry.computeBoundingBox();
+        if (p.type !== 'ground') this.bounds.union(part.mesh.geometry.boundingBox!);
         part.mesh.updateMatrixWorld(true);
         this.root.add(part.mesh);
         if (part.collide) {
@@ -140,8 +155,11 @@ export class World {
   }
 
   /** First rail touching a capsule (segment p-q with radius). */
-  railNear(p: Vector3, q: Vector3, radius: number): RailSeg | null {
-    for (const rail of this.rails) if (segSegDistance(p, q, rail.a, rail.b) < radius + rail.radius) return rail;
+  railNear(p: Vector3, q: Vector3, radius: number, includeCoping = false): RailSeg | null {
+    for (const rail of this.rails) {
+      if (rail.coping && !includeCoping) continue;
+      if (segSegDistance(p, q, rail.a, rail.b) < radius + rail.radius) return rail;
+    }
     return null;
   }
 

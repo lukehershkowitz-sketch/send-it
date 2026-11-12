@@ -62,6 +62,10 @@ export class RiderController {
   basePitch = 0;    // pitch from trajectory-follow (+ takeoff offset), excludes flips
   pitchOffset = 0;  // takeoff pitch relative to the auto-level target; eases to 0
   airGroundNormal = new Vector3(0, 1, 0); // smoothed normal of the predicted landing surface
+  /** Air rotation frame: identity off kickers; off a vert wall its "up" is the wall normal. */
+  airFrame = new Quaternion();
+  airFrameInv = new Quaternion();
+  vertAir = false;
   /** Ballistic prediction of where we'll touch down (refreshed ~30 Hz while airborne). */
   predicted = { valid: false, point: new Vector3(), normal: new Vector3(0, 1, 0), time: 99 };
   flipAngle = 0;    // input-driven pitch rotation (rad, backflip +)
@@ -184,7 +188,8 @@ export class RiderController {
       }
     }
     const f = this.world.finish;
-    if (f && !this.finished && Math.hypot(f.pos.x - this.pos.x, f.pos.z - this.pos.z) < f.radius) {
+    if (f && !this.finished && Math.hypot(f.pos.x - this.pos.x, f.pos.z - this.pos.z) < f.radius &&
+        (!f.dir || f.dir.x * this.vel.x + f.dir.z * this.vel.z > 1)) {
       this.finished = true;
       this.events.emit('finish', {});
     }
@@ -211,7 +216,7 @@ export class RiderController {
     const g = w.groundBelow(this.pos);
     if (g) { this.pos.copy(g.point); this.normal.copy(g.normal); } else this.normal.set(0, 1, 0);
     this.heading = this.travelYaw = cp ? cp.yaw : w.spawnYaw;
-    this.speed = cp ? cp.speed : 0;
+    this.speed = cp ? cp.speed : w.spawnSpeed;
     this.vel.set(0, 0, 0);
     this.fakie = false;
     this.fakieVis = 0;
@@ -241,8 +246,17 @@ export class RiderController {
 
   /** Leave the ground with the current `vel`. */
   takeoff(popped: boolean): void {
-    // orientation at takeoff (without lean)
-    _f.copy(FWD).applyQuaternion(this.groundQuatNoLean());
+    // vert: leaving a near-vertical wall going up → spin/flip in the wall's frame, come back down it
+    const A = TUNING.air;
+    this.vertAir = this.normal.y < A.vertNormalY && this.vel.y > 0.5;
+    if (this.vertAir) {
+      _u.set(this.normal.x, 0, this.normal.z).normalize();
+      this.airFrame.setFromUnitVectors(UP, _u);
+      this.vel.addScaledVector(_u, A.vertOutSpeed - this.vel.dot(_u));
+    } else this.airFrame.identity();
+    this.airFrameInv.copy(this.airFrame).invert();
+    // orientation at takeoff (without lean), in the air frame
+    _f.copy(FWD).applyQuaternion(this.groundQuatNoLean()).applyQuaternion(this.airFrameInv);
     this.airYaw = yawOf(_f);
     this.basePitch = Math.asin(clamp(_f.y, -1, 1));
     this.airGroundNormal.copy(this.normal);
@@ -300,10 +314,11 @@ export class RiderController {
   autoLevelTarget(): number {
     const A = TUNING.air;
     const fx = Math.sin(this.airYaw), fz = Math.cos(this.airYaw);
-    const horiz = Math.max(0.01, Math.hypot(this.vel.x, this.vel.z));
-    const facing = (fx * this.vel.x + fz * this.vel.z) / horiz; // cos(facing vs travel)
-    const traj = Math.atan2(this.vel.y, horiz) * facing;
-    const n = this.airGroundNormal;
+    const v = _pv.copy(this.vel).applyQuaternion(this.airFrameInv); // frame space
+    const horiz = Math.max(0.01, Math.hypot(v.x, v.z));
+    const facing = (fx * v.x + fz * v.z) / horiz; // cos(facing vs travel)
+    const traj = Math.atan2(v.y, horiz) * facing;
+    const n = _ps.copy(this.airGroundNormal).applyQuaternion(this.airFrameInv);
     const ground = Math.atan2(-(n.x * fx + n.z * fz), n.y);
     const w = clamp(1 - this.predicted.time / A.alignTime, A.groundAlignMin, 1);
     return A.autoLevel * (traj + (ground - traj) * w);
@@ -337,7 +352,7 @@ export class RiderController {
 
   /** Air orientation from yaw / base pitch / flip. */
   airQuat(out: Quaternion): Quaternion {
-    return quatFromYawPitch(this.airYaw, this.basePitch + this.flipAngle, out);
+    return quatFromYawPitch(this.airYaw, this.basePitch + this.flipAngle, out).premultiply(this.airFrame);
   }
 
   /** Evaluate a landing against surface normal `n` with the current orientation + velocity. */
