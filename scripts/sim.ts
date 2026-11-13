@@ -17,7 +17,7 @@ const world = new World(park as ParkDef);
 const lip = world.lips[0];
 const combo = new ComboTracker(); // shared across runs so repetition shows up
 
-function run(name: string, script: Script, opts: { maxT?: number; setup?: (r: RiderController) => void } = {}) {
+function run(name: string, script: Script, opts: { maxT?: number; setup?: (r: RiderController) => void; stopAfterLand?: boolean } = {}) {
   const ev = new Emitter<RiderEvents>();
   const log: string[] = [];
   let takeoffSpeed = 0;
@@ -34,6 +34,7 @@ function run(name: string, script: Script, opts: { maxT?: number; setup?: (r: Ri
   combo.events.on('banked', (b) => { banked ||= `BANKED ${b.total} (${b.entries.map((e) => `${e.name}=${Math.round(e.points)}${e.note ? ` [${e.note}]` : ''}`).join(', ')} ×${b.multiplier})`; });
   ev.on('landed', (l) => {
     combo.addAir(l.air, l.stomped);
+    if (opts.stopAfterLand && l.air.airTime > 0.2) done ||= `LANDED ${l.stomped ? 'STOMP' : 'clean'}`;
     if (l.air.airTime > 0.3) log.push(`landed ${l.stomped ? 'STOMPED' : 'CLEAN'} "${l.trick}" air=${l.air.airTime.toFixed(2)}`);
   });
   ev.on('bail', (b) => { combo.lose(); done ||= `BAIL "${b.reason}"${b.landing ? ` "${b.landing.trick}" yaw=${b.landing.yawErr.toFixed(0)} pitch=${b.landing.pitchErr.toFixed(0)} whip=${b.landing.whipErr.toFixed(0)} bar=${b.landing.barErr.toFixed(0)}` : ''}`; });
@@ -93,7 +94,7 @@ run('rail, angled entry', all(pedalUntil(-19.5), hopAt(-18.4, -16.7), balance), 
 run('rail, pop off', all(pedalUntil(-19.5), hopAt(-18.4, -16.7), balance,
   (r, _t, i) => { if (r.state === 'GRINDING') i.pop = r.railT > 0.6 && r.railT < 0.75; },
   (r, _t, i) => { if (r.state === 'GROUNDED' && r.pos.z > -12.5) i.steer = 1; }, // roll away from the end of the rail
-), { setup: onRailLine, maxT: 12 });
+), { setup: onRailLine, maxT: 12, stopAfterLand: true });
 const angled = (r: RiderController) => { r.pos.set(4.2, 0, -21); r.heading = r.travelYaw = 0.3; r.prevPos.copy(r.pos); };
 const hopX = (x: number): Script => (r, _t, i) => { if (r.state === 'GROUNDED') { i.pop = r.pos.x > x - 1 && r.pos.x < x; if (r.speed < 6) i.pedal = 1; } };
 run('angled → feeble', all(hopX(6.2), balance), { setup: angled });
