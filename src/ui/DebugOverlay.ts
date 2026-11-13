@@ -48,7 +48,7 @@ export class DebugOverlay {
       }
     } else if (r.state === 'GRINDING') {
       lines.push(`grind <b>${r.grindType}</b>${r.grindFakie ? ' (fakie)' : ''}  ${f(r.grindTime, 2)} s  rail t ${f(r.railT, 2)}`);
-      lines.push(`<span class="${ok(Math.abs(r.balance) < 0.7)}">balance ${f(r.balance, 2)}</span>  speed ${f(r.speed)}`);
+      lines.push(`speed ${f(r.speed)}`);
     } else if (r.state === 'MANUALING') {
       lines.push(`${r.manualNose ? 'nose manual' : 'manual'} ${f(r.manualTime, 2)} s  <span class="${ok(Math.abs(r.balance) < 0.7)}">balance ${f(r.balance, 2)}</span>`);
     } else {

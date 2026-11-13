@@ -86,9 +86,7 @@ function enterGrind(r: RiderController, rail: NonNullable<RiderController['rail'
   r.grindType = type;
   r.grindYaw = type === 'FEEBLE' || type === 'SMITH' ? Math.sign(rel) * G.feebleSmithYaw * DEG : 0;
   r.grindTime = 0;
-  r.balance = (Math.random() - 0.5) * 0.1;
-  r.balanceVel = (Math.random() - 0.5) * 0.2;
-  r.balanceDrift = 0;
+  r.balance = r.balanceVel = r.balanceDrift = 0; // grinds don't balance: you stay on until you pop off or the rail ends
   r.compression = 0;
   r.popWasHeld = false;
   r.rot.omega.set(0, 0, 0);
@@ -153,11 +151,6 @@ export const Grinding = {
 
     r.speed += (-P.gravity * G.gravityScale * _travel.y - G.friction) * dt;
     r.railT += (r.railSign * r.speed * dt) / len;
-
-    if (!updateBalance(r, dt, input.steer, r.grindTime, G)) {
-      r.bail(r.balance > 0 ? 'Fell off the rail (right)' : 'Fell off the rail (left)');
-      return;
-    }
 
     // pop off: load + release Space
     if (input.pop) r.compression = Math.min(1, r.compression + dt / POP.compressTime);

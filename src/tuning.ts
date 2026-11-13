@@ -185,11 +185,6 @@ export const TUNING = {
     feebleSmithYaw: 26,        // visual yaw of the bike in feeble/smith
     icepickNoseUp: 34,
     popScale: 0.85,            // pop strength off a rail (× normal pop)
-    balanceInstability: 2.2,   // how fast an off-centre balance falls further (grows with time)
-    instabilityGrowth: 0.5,
-    balanceNoise: 1.8,         // random wobble
-    balanceControl: 5.5,       // how hard A/D push the balance
-    balanceDamping: 1.6,
   },
 
   manual: {
