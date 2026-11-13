@@ -125,13 +125,13 @@ export class RiderRig {
 
   private mats: Record<string, Material>;
 
-  constructor(colors: RigColors = { frame: 0xff5a1f, rider: 0x1fb5a6, pants: 0x2b2f3a, helmet: 0xf4f4f4 }) {
+  constructor(colors: RigColors = { frame: 0x26292e, rider: 0x58626d, pants: 0x2b3038, helmet: 0x1b1d21 }) {
     const L = (c: number) => new MeshLambertMaterial({ color: c });
     this.mats = {
       frame: L(colors.frame), chrome: L(0xcfd6dc), tire: L(0x1d1d1f), rim: L(0x9aa3ab), dark: L(0x2a2d31),
       shirt: L(colors.rider), pants: L(colors.pants), skin: L(0xe0a77f), helmet: L(colors.helmet),
-      shoe: L(0xe8e8e8), visor: L(0x222222), grip: L(0x111111), glove: L(0x2b2b30), sole: L(0x1a1a1a),
-      accent: L(0xffd23f), goggle: L(0xff8a3d), sidewall: L(0x6b4a2a), chain: L(0x55595e),
+      shoe: L(0x33363b), visor: L(0x222222), grip: L(0x111111), glove: L(0x2b2b30), sole: L(0x1a1a1a),
+      accent: L(0x7d848c), goggle: L(0x2c3138), sidewall: L(0x6b4a2a), chain: L(0x55595e),
     };
     const pbr: Record<string, [number, number]> = {
       frame: [0.36, 0.35], chrome: [0.22, 0.95], tire: [0.95, 0], rim: [0.3, 0.85], dark: [0.55, 0.4], helmet: [0.32, 0],
@@ -415,7 +415,7 @@ export class RiderRig {
     hip.x += p.lean * 0.12 + p.shiftX;
     hip.z += p.shiftZ;
     hip.y += 0.07 * p.table;
-    const sh = this._sh.copy(hip).add(this._t.set(p.shiftX * 0.7, 0.45 - 0.1 * c, 0.2 + 0.07 * c + p.shiftZ * 0.8 - 0.1 * p.table));
+    const sh = this._sh.copy(hip).add(this._t.set(p.shiftX * 0.7, 0.45 - 0.1 * c, 0.27 + 0.1 * c + p.shiftZ * 0.8 - 0.1 * p.table));
     sh.lerp(this._a.copy(hip).add(this._t.set(0, 0.16, 0.5)), p.superman);
     sh.lerp(this._a.copy(hip).add(this._t.set(0, 0.5, 0.06)), p.tuck);
     const L = this.limbs;
@@ -442,8 +442,8 @@ export class RiderRig {
       grip.lerp(this._t.set(0.32 * s, sh.y - 0.2, sh.z + 0.22), p.handsOff);
       grip.lerp(this._t.set(0.5 * s, sh.y + 0.32, sh.z - 0.05), p.tuck);
       this.hands[side].position.copy(grip);
-      const shS = this._b.copy(sh).add(this._t.set(0.18 * s, -0.02, 0));
-      solveIK(shS, grip, 0.3, 0.3, this._t.set(1.0 * s, -0.4, -0.6), this._k);
+      const shS = this._b.copy(sh).add(this._t.set(0.17 * s, -0.03, 0));
+      solveIK(shS, grip, 0.3, 0.3, this._t.set(0.55 * s, -0.6, -0.55), this._k);
       placeSeg(L[side === 0 ? 'upperL' : 'upperR'], shS, this._k, 0.045);
       this.joints[side === 0 ? 'elbowL' : 'elbowR'].position.copy(this._k);
       this.joints[side === 0 ? 'elbowL' : 'elbowR'].scale.setScalar(0.043 * this.jointScale);
