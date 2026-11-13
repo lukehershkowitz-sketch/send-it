@@ -68,13 +68,13 @@ export const TUNING = {
   },
 
   air: {
-    autoLevel: 1.0,           // 0 = no help, 1 = full: the light landing assist described below
+    autoLevel: 0.85,           // 0 = no help, 1 = full: the light landing assist described below
     latchPedalAtTakeoff: true, // W held through the lip doesn't start a frontflip until re-pressed
     airDrag: 0.0008,           // × speed²: speed is kept in the air
     vertNormalY: 0.25,         // leaving a surface steeper than ~75° going up = vert air (spins turn you in the wall's plane); spines (~70°) let you transfer
     vertOutSpeed: 0.5,         // in vert air, speed away from the wall is set to this so you come back down the transition
-    whipRate: 760,             // °/s tailwhip
-    barRate: 900,              // °/s barspin
+    whipRate: 600,             // °/s tailwhip
+    barRate: 700,              // °/s barspin
     rotAccelRate: 14,          // spin-up smoothing of whips/barspins
     rotStopRate: 22,
     catchWindow: 80,           // releasing a whip/barspin within this many ° of a full turn auto-catches it…
@@ -89,7 +89,7 @@ export const TUNING = {
     followDampRoll: 7.5,
     followEngage: 12,          // 1/s: how fast the stabiliser re-engages once you stop driving the rotation
     followMaxFlip: 105,        // ° of flip (vs the flight path) beyond which following switches off: that's a flip trick, not nose lag
-    followMaxPitchRate: 3.5,   // rad/s: …or while pitching faster than this
+    followMaxPitchRate: 2.4,   // rad/s: …or while pitching faster than this
     followMaxRoll: 110,        // ° of accumulated roll beyond which following switches off…
     followMaxRollRate: 4.5,    // …or while rolling faster than this (rad/s): a barrel roll in progress         // ° of accumulated flip/roll beyond which following switches off (you're doing a trick)
     blendTime: 0.9,            // s before touchdown the target nose angle starts easing from the flight path onto the landing slope
@@ -111,8 +111,8 @@ export const TUNING = {
    * brace) to stop. Per-axis terminal rates come from quadratic air drag.
    */
   rot: {
-    torque: { pitch: 32, yaw: 34, roll: 30 },   // rad/s² at full input (neutral posture)
-    maxRate: { pitch: 10.5, yaw: 14, roll: 10 }, // rad/s: the most the rider can drive each axis to
+    torque: { pitch: 21, yaw: 22, roll: 26 },   // rad/s² at full input (neutral posture)
+    maxRate: { pitch: 7.2, yaw: 9.5, roll: 8.2 }, // rad/s: the most the rider can drive each axis to
     inertia: { pitch: 1.0, yaw: 0.7, roll: 0.45 }, // relative moments (drive gyroscopic coupling between axes)
     gyro: 0.4,                 // 0..1 how strongly the axes interact (Euler's equations)
     linearDrag: 0.28,          // 1/s: untouched spins decay slowly
@@ -122,12 +122,12 @@ export const TUNING = {
     inertiaRate: 10,           // how fast posture changes
     // off-axis mixes: ratio of each axis torque to the spin torque
     flairYaw: 0.45,            // ↑ alone: backflip with this much spin
-    corkRoll: 0.58,            // ↑ + A/D: spin with the axis tilted sideways → cork
+    corkRoll: 0.44,            // ↑ + A/D: spin with the axis tilted sideways → cork
     corkPitch: 0.3,
     rodeoPitch: 0.95,          // ↑ + A/D + S: spin with the axis tipped back → rodeo
-    rodeoRoll: 0.25,
+    rodeoRoll: 0.19,
     mistyPitch: 0.95,          // ↑ + A/D + W: tipped forward → misty
-    mistyRoll: 0.2,
+    mistyRoll: 0.15,
     tabletopAngle: 78,         // ° the tabletop key rolls the bike toward
     tabletopGain: 70,
     tabletopDamp: 9,
@@ -256,8 +256,8 @@ export const TUNING = {
 
   camera: {
     baseFov: 62,
-    speedFovBoost: 12,
-    airFovBoost: 7,
+    speedFovBoost: 7,
+    airFovBoost: 3,
     distMin: 4.8,
     distMax: 6.6,
     heightMin: 2.5,
@@ -272,7 +272,7 @@ export const TUNING = {
     bigAirHeight: 5,           // m above the ground at which the framing has fully widened for a big jump
     bigAirPull: 2.2,           // extra distance behind the rider at that height
     bigAirRaise: 0.9,
-    bigAirFov: 5,              // extra field of view at that height
+    bigAirFov: 3,              // extra field of view at that height
     landKick: 0.05,           // m of vertical camera dip per m/s of landing impact
     landKickMax: 0.4,
     landKickFov: 0.55,         // ° of FOV punch per m/s of impact

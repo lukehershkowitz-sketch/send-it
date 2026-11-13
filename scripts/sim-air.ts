@@ -140,7 +140,7 @@ console.log('— rotation momentum, body-weight control at takeoff');
     },
   });
   void m;
-  check(r1 > 4 && r2 > 0.75 * r1 && a2 > a1 + 1.0, `rotation carries on after the keys are released: ${r1.toFixed(1)} rad/s at release → ${r2.toFixed(1)} rad/s 0.3 s later (+${((a2 - a1) / DEG).toFixed(0)}° with no input)`);
+  check(r1 > 3 && r2 > 0.75 * r1 && a2 > a1 + 0.8, `rotation carries on after the keys are released: ${r1.toFixed(1)} rad/s at release → ${r2.toFixed(1)} rad/s 0.3 s later (+${((a2 - a1) / DEG).toFixed(0)}° with no input)`);
 
   // weight shift while loaded: leaning back vs forward changes the rotation you leave the ramp with
   const lean = (dir: number) => ride(world, { speed: 12, maxT: 3, tail: 0, pilot: (r, t, i) => { popPilot(lipZ)(r, t, i); if (r.state === 'GROUNDED' && i.pop) { if (dir > 0) i.pedal = 1; else i.brake = 1; } } });
@@ -194,10 +194,10 @@ console.log('— collision reliability at fast rotation');
 console.log('— cork / rodeo / misty / tabletop / roll in the game loop');
 {
   const names = (keys: { steer?: number; pedal?: number; brake?: number; flair?: boolean; roll?: boolean; tabletop?: boolean }, hold: number) => {
-    const { world, lipZ } = kickerWorld(4.2, 45, 6, 3.3);
+    const { world, lipZ } = kickerWorld(3.0, 36, 10, 1.6);
     let best = '';
     ride(world, {
-      speed: 12, maxT: 5.5, tail: 0,
+      speed: 17, maxT: 6, tail: 0,
       pilot: (r, t, i) => {
         popPilot(lipZ)(r, t, i);
         if (r.state === 'AIRBORNE') {
@@ -207,7 +207,7 @@ console.log('— cork / rodeo / misty / tabletop / roll in the game loop');
             i.steer = keys.steer ?? 0; i.pedal = keys.pedal ?? 0; i.brake = keys.brake ?? 0; i.flair = !!keys.flair; i.roll = !!keys.roll; i.tabletop = !!keys.tabletop;
             void m;
           }
-          const nm = r.describeAir();
+          const nm = r.describeAir(); if (process.env.DBG && Math.round(r.airTime*10)%2===0 && Math.abs(r.airTime*10-Math.round(r.airTime*10))<0.01) console.log(r.airTime.toFixed(2), nm);
           if (nm.length >= best.length && !/^(FAKIE )?(AIR|HOP)$/.test(nm)) { best = nm; }
         }
       },
@@ -217,7 +217,7 @@ console.log('— cork / rodeo / misty / tabletop / roll in the game loop');
   const cork = names({ flair: true, steer: 1 }, 1.3);
   const rodeo = names({ flair: true, steer: 1, brake: 1 }, 1.3);
   const misty = names({ flair: true, steer: 1, pedal: 1 }, 1.3);
-  const roll = names({ roll: true, steer: 1 }, 1.0);
+  const roll = names({ roll: true, steer: 1 }, 1.15);
   const table = names({ tabletop: true }, 0.8);
   const flat = names({ steer: 1 }, 0.9);
   check(/CORK/.test(cork), `↑ + D reads as a cork: "${cork}"`);

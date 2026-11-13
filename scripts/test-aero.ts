@@ -84,7 +84,7 @@ trick('cork (↑ + D)', { flair: true, steer: 1 }, 1.0, 'cork', 'CORK');
 trick('cork left (↑ + A)', { flair: true, steer: -1 }, 1.0, 'cork', 'CORK');
 trick('rodeo (↑ + D + S)', { flair: true, steer: 1, brake: 1 }, 1.0, 'rodeo', 'RODEO');
 trick('misty (↑ + D + W)', { flair: true, steer: 1, pedal: 1 }, 1.0, 'misty', 'MISTY');
-trick('flair (↑)', { flair: true }, 0.5, 'flip', '');
+trick('flair (↑)', { flair: true }, 0.75, 'flip', '');
 trick('barrel roll (Shift + D)', { roll: true, steer: 1 }, 0.75, 'roll', 'BARREL');
 
 console.log(failures ? `\n${failures} failure(s)` : '\nall rotation checks passed');
