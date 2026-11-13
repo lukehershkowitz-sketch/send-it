@@ -227,7 +227,7 @@ export class RiderController {
     else this.accelB.y += TUNING.physics.gravity;
     this.accelB.clampLength(0, 60).applyQuaternion(_q.copy(this.quat).invert());
 
-    let crouch = 0, sx = 0, sz = 0, table = 0;
+    let crouch = 0, sx = 0, sz = 0, table = 0, twist = 0, head = 0;
     if (st === 'AIRBORNE') {
       const w = this.rot.omegaB;
       const curl = 0.5 * clamp(Math.abs(w.x) / 6, 0, 1) + 0.22 * clamp(Math.abs(w.y) / 9, 0, 1) + 0.12 * clamp(Math.abs(w.z) / 7, 0, 1);
@@ -247,6 +247,11 @@ export class RiderController {
       sz = clamp(-w.x * 0.0125 - 0.06 * rise + 0.05 * fall + sway, -0.16, 0.16);
       sx = clamp(-w.y * 0.01 + 0.12 * Math.sin(roll) + Math.cos(this.airTime * 1.7) * 0.012 * apex, -0.14, 0.14);
       table = clamp((Math.abs(roll) - 35 * DEG) / (37 * DEG), 0, 1);
+      // spins: the torso lags and counter-twists while the head turns first to find the landing; both unwind on approach
+      const spinRate = this.rot.omega.dot(this.rot.frameUp);
+      const settle = 1 - prep;
+      twist = clamp(-spinRate * 0.085, -0.8, 0.8) * settle;
+      head = clamp(spinRate * 0.1, -0.95, 0.95) * settle;
     } else if (st === 'GRINDING') {
       crouch = 0.35;
       sx = -this.balance * 0.08;
@@ -257,7 +262,7 @@ export class RiderController {
       sz = clamp(this.shiftZ * 0.12 - this.accelB.z * 0.003, -0.16, 0.16);
       sx = clamp(-this.shiftX * 0.1 - this.accelB.x * 0.002, -0.14, 0.14);
     }
-    B.update(dt, { crouch, shiftX: sx, shiftZ: sz, table });
+    B.update(dt, { crouch, shiftX: sx, shiftZ: sz, table, twist, head });
   }
 
   /** Checkpoints + finish line. */

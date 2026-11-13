@@ -23,6 +23,7 @@ const WHEEL_GEO = (() => {
 export interface PoseParams {
   crouch: number; wheelAngle: number; bar: number; whip: number;
   tuck: number; superman: number; cancan: number; feetOff: number; handsOff: number; lean: number;
+  twist: number; headYaw: number; // torso / head yaw against the bike (rad)
   shiftX: number; shiftZ: number; table: number; // rider body relative to the bike (m) and tabletop blend
 }
 
@@ -39,7 +40,7 @@ export function makeSnapshot(): RigSnapshot {
   return {
     pos: new Vector3(), quat: new Quaternion(), bailed: false,
     bikePos: new Vector3(), bikeQuat: new Quaternion(), riderPos: new Vector3(), riderQuat: new Quaternion(),
-    pose: { crouch: 0, wheelAngle: 0, bar: 0, whip: 0, tuck: 0, superman: 0, cancan: 0, feetOff: 0, handsOff: 0, lean: 0, shiftX: 0, shiftZ: 0, table: 0 },
+    pose: { crouch: 0, wheelAngle: 0, bar: 0, whip: 0, tuck: 0, superman: 0, cancan: 0, feetOff: 0, handsOff: 0, lean: 0, shiftX: 0, shiftZ: 0, table: 0, twist: 0, headYaw: 0 },
     speed: 0, motionYaw: 0, airborne: false,
   };
 }
@@ -66,6 +67,8 @@ export function snapshot(r: RiderController, alpha: number, out: RigSnapshot): R
   P.shiftX = r.body.shiftX;
   P.shiftZ = r.body.shiftZ;
   P.table = r.body.table;
+  P.twist = r.body.twist;
+  P.headYaw = r.body.head;
   out.speed = r.state === 'GROUNDED' ? r.speed : r.vel.length();
   out.motionYaw = r.motionYaw();
   out.airborne = r.state === 'AIRBORNE';
@@ -455,7 +458,7 @@ export class RiderRig {
     const td = this._a.copy(sh).sub(hip);
     const tl = td.length();
     this.torso.position.copy(hip).addScaledVector(td, 0.5);
-    this.torso.quaternion.setFromUnitVectors(UPV, td.divideScalar(tl));
+    this.torso.quaternion.setFromUnitVectors(UPV, td.divideScalar(tl)).multiply(this._q.setFromAxisAngle(UPV, p.twist));
     this.torso.scale.set(0.4, tl + 0.12, this.jointScale < 1 ? 0.24 : 0.2);
     this.pelvis.position.copy(hip);
     this.pelvis.quaternion.copy(this.torso.quaternion);
@@ -465,6 +468,7 @@ export class RiderRig {
     this.head.position.copy(neckTop).add(this._t.set(0, 0.11, 0.03));
     this.head.rotation.x = 0.25 + 0.25 * c + p.superman * 0.6 - p.shiftZ * 1.2;
     this.head.rotation.z = -p.shiftX * 1.6;
+    this.head.rotation.y = p.twist + p.headYaw;
   }
 
   /** Copy the controller's interpolated state onto the rig. */

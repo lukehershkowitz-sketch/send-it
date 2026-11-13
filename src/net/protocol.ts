@@ -38,6 +38,7 @@ export function encodeSnapshot(s: RigSnapshot): number[] {
     out.push(r2(s.bikePos.x), r2(s.bikePos.y), r2(s.bikePos.z), r3(s.bikeQuat.x), r3(s.bikeQuat.y), r3(s.bikeQuat.z), r3(s.bikeQuat.w));
     out.push(r2(s.riderPos.x), r2(s.riderPos.y), r2(s.riderPos.z), r3(s.riderQuat.x), r3(s.riderQuat.y), r3(s.riderQuat.z), r3(s.riderQuat.w));
   }
+  out.push(r2(P.twist), r2(P.headYaw)); // appended last so older readers (which stop at fixed offsets) still work
   return out;
 }
 
@@ -50,6 +51,8 @@ export function decodeSnapshot(a: number[], out: RigSnapshot): RigSnapshot {
   out.motionYaw = a[21];
   out.airborne = a[22] === 1;
   out.bailed = a[23] === 1 && a.length >= 38;
+  P.twist = P.headYaw = 0;
+  if (a.length === 26 || a.length === 40) { P.twist = a[a.length - 2]; P.headYaw = a[a.length - 1]; }
   if (out.bailed) {
     out.bikePos.set(a[24], a[25], a[26]); out.bikeQuat.set(a[27], a[28], a[29], a[30]).normalize();
     out.riderPos.set(a[31], a[32], a[33]); out.riderQuat.set(a[34], a[35], a[36], a[37]).normalize();
