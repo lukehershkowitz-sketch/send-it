@@ -12,10 +12,13 @@ import type { ModelKit } from '../rider/models';
 
 export type Lighting = 'day' | 'night';
 
+/** Direction the sun light comes from (shared by the sky, the sun light and the shadow camera). Low and warm: long, soft shadows. */
+export const SUN_DIR = new Vector3(-48, 46, -30).normalize();
+
 const PRESETS = {
   day: {
-    sky: 0xa6d0ef, skyTop: 0x2f7fd8, skyGround: 0x6f7a55, hemiSky: 0xdff1ff, hemiGround: 0x5d4a35, hemi: 1.5,
-    sun: 0xfff0d6, sunI: 2.4, sunGlow: 0xfff3d6, fogNear: TUNING.render.fogNear, fogFar: TUNING.render.fogFar, stars: 0,
+    sky: 0xb9d2e4, skyTop: 0x2a6fc4, skyGround: 0x6f7a55, hemiSky: 0xbcd6ff, hemiGround: 0x6a5a40, hemi: 1.25,
+    sun: 0xffe2b8, sunI: 3.1, sunGlow: 0xffe6c0, fogNear: TUNING.render.fogNear, fogFar: TUNING.render.fogFar, stars: 0,
   },
   night: {
     sky: 0x17223d, skyTop: 0x03060f, skyGround: 0x0c0f14, hemiSky: 0x4a5a8a, hemiGround: 0x1a1612, hemi: 0.35,
@@ -24,24 +27,47 @@ const PRESETS = {
 };
 
 /** Gradient sky + sun/moon glow (+ stars at night), drawn on a big inside-out sphere. */
-function skyMaterial(L: { sky: number; skyTop: number; skyGround: number; sunGlow: number; stars: number }) {
+function skyMaterial(L: { sky: number; skyTop: number; skyGround: number; sunGlow: number; stars: number }, clouds: number) {
   return new ShaderMaterial({
     side: BackSide, depthWrite: false, fog: false, toneMapped: false,
     uniforms: {
       top: { value: new Color(L.skyTop) }, horizon: { value: new Color(L.sky) }, ground: { value: new Color(L.skyGround) },
-      sunDir: { value: new Vector3(-30, 60, -20).normalize() }, // same direction the sun light comes from
-      glow: { value: new Color(L.sunGlow) }, stars: { value: L.stars },
+      sunDir: { value: SUN_DIR.clone() },
+      glow: { value: new Color(L.sunGlow) }, stars: { value: L.stars }, clouds: { value: clouds },
     },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; }',
     fragmentShader: `
-      uniform vec3 top; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunDir; uniform vec3 glow; uniform float stars;
+      uniform vec3 top; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunDir; uniform vec3 glow; uniform float stars; uniform float clouds;
       varying vec3 vDir;
+      float vnoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453), b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+        float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453), d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+      float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * vnoise(p); p = p * 2.03 + 11.7; a *= 0.5; } return s; }
       float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
       void main() {
         vec3 d = normalize(vDir);
         float h = d.y;
         vec3 c = h > 0.0 ? mix(horizon, top, pow(smoothstep(0.0, 0.75, h), 0.8)) : mix(horizon, ground, smoothstep(0.0, 0.15, -h));
         float s = max(dot(d, normalize(sunDir)), 0.0);
+        // atmosphere: horizon haze, warm forward scattering toward the sun, sun disc
+        if (clouds > 0.5) {
+          c = mix(c, horizon * 1.04, exp(-max(h, 0.0) * 9.0) * 0.55);
+          c += glow * pow(s, 5.0) * 0.18 * exp(-max(h, 0.0) * 2.5);
+          // layered clouds on a flat deck: stretched toward the horizon, lit on the sun side, grey-blue underneath
+          if (h > 0.015) {
+            vec2 cp = d.xz / (h + 0.22) * 1.35 + vec2(7.3, 2.1);
+            float n = fbm(cp * 0.85) * 0.75 + fbm(cp * 2.6) * 0.25;
+            float dens = smoothstep(0.50, 0.78, n);
+            float lit = clamp(0.55 + 0.9 * dot(normalize(vec3(d.x, 0.35, d.z)), normalize(vec3(sunDir.x, 0.35, sunDir.z))) * 0.6 - (n - 0.55) * 1.2, 0.0, 1.0);
+            vec3 cc = mix(vec3(0.62, 0.69, 0.80), vec3(1.0, 0.97, 0.92), lit);
+            cc += glow * pow(s, 8.0) * 0.5;
+            float fade = smoothstep(0.015, 0.16, h);
+            c = mix(c, cc, dens * 0.92 * fade);
+          }
+        }
         c += glow * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.25);
         if (stars > 0.5 && h > 0.05) {
           float st = step(0.9975, hash(floor(d * 260.0)));
@@ -80,11 +106,11 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
   hemi.userData.base = L.hemi;
   group.add(hemi);
   const sun = new DirectionalLight(L.sun, L.sunI);
-  sun.position.set(-30, 60, -20);
+  sun.position.copy(SUN_DIR).multiplyScalar(70);
   group.add(sun);
 
   // sky dome, and the same sky baked into an environment map for physical materials
-  const skyMat = keep(skyMaterial(L));
+  const skyMat = keep(skyMaterial(L, night ? 0 : 1));
   const skyGeo = keep(new SphereGeometry(450, 32, 16));
   const sky = new Mesh(skyGeo, skyMat);
   sky.renderOrder = -10;

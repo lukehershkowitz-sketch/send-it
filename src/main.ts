@@ -511,6 +511,7 @@ const loop = new GameLoop(
     });
     debug.update(realDt, rider);
     graphics.follow(rider.state === 'BAILED' ? rig.riderBody.position : rig.root.position);
+    graphics.setSpeed(rider.state === 'BAILED' ? 0 : (rider.state === 'GROUNDED' ? rider.speed : rider.vel.length()) / 22 - 0.35);
     graphics.render();
   },
 );

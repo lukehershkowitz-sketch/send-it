@@ -7,6 +7,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { SUN_DIR } from '../world/decor';
 
 export type Quality = 'low' | 'medium' | 'high';
 
@@ -16,14 +18,15 @@ interface Preset {
   shadowTrees: boolean;  // trees cast shadows too
   post: boolean;         // composer: colour grade + vignette
   bloom: boolean;
+  ao: boolean;           // screen-space ambient occlusion (contact shadows under trees, ramps, the rider)
   msaa: number;          // samples on the composer target
   maxPixelRatio: number;
 }
 
 export const PRESETS: Record<Quality, Preset> = {
-  low: { pbr: false, shadows: 0, shadowTrees: false, post: false, bloom: false, msaa: 0, maxPixelRatio: 1.25 },
-  medium: { pbr: true, shadows: 1024, shadowTrees: false, post: true, bloom: false, msaa: 0, maxPixelRatio: 1.5 },
-  high: { pbr: true, shadows: 2048, shadowTrees: true, post: true, bloom: true, msaa: 4, maxPixelRatio: 2 },
+  low: { pbr: false, shadows: 0, shadowTrees: false, post: false, bloom: false, ao: false, msaa: 0, maxPixelRatio: 1.25 },
+  medium: { pbr: true, shadows: 1024, shadowTrees: false, post: true, bloom: false, ao: false, msaa: 0, maxPixelRatio: 1.5 },
+  high: { pbr: true, shadows: 2048, shadowTrees: true, post: true, bloom: true, ao: true, msaa: 4, maxPixelRatio: 2 },
 };
 
 /** Physical-material hints, set on a Lambert material's userData by whoever creates it. */
@@ -35,24 +38,47 @@ const GradeShader = {
     contrast: { value: 1.08 },
     saturation: { value: 1.12 },
     lift: { value: new Vector3(0.012, 0.006, -0.004) }, // a touch warm in the shadows
-    vignette: { value: 0.28 },
+    vignette: { value: 0.3 },
+    speed: { value: 0 },      // 0..1: radial speed blur + a touch of lens fringing at the edges
+    time: { value: 0 },
+    grain: { value: 0.025 },
+    warm: { value: new Vector3(1.04, 1.0, 0.94) },  // highlights lean warm,
+    cool: { value: new Vector3(0.95, 1.0, 1.06) },  // shadows lean cool (split tone)
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: `
     uniform sampler2D tDiffuse; uniform float contrast; uniform float saturation; uniform vec3 lift; uniform float vignette;
+    uniform float speed; uniform float time; uniform float grain; uniform vec3 warm; uniform vec3 cool;
     varying vec2 vUv;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + time) * 43758.5453); }
     void main() {
-      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      vec2 d = vUv - 0.5;
+      float r = length(d * vec2(1.25, 1.0));
+      // speed: radial blur growing toward the screen edges (the rider in the middle stays sharp) + a little chromatic fringe
+      float amt = speed * smoothstep(0.18, 0.9, r);
+      vec3 c;
+      if (amt > 0.002) {
+        c = vec3(0.0);
+        for (int i = 0; i < 6; i++) {
+          float k = float(i) / 5.0;
+          vec2 uv = 0.5 + d * (1.0 - amt * 0.07 * k);
+          c += texture2D(tDiffuse, uv).rgb;
+        }
+        c /= 6.0;
+        c.r = mix(c.r, texture2D(tDiffuse, 0.5 + d * (1.0 + amt * 0.006)).r, 0.6);
+        c.b = mix(c.b, texture2D(tDiffuse, 0.5 + d * (1.0 - amt * 0.006)).b, 0.6);
+      } else c = texture2D(tDiffuse, vUv).rgb;
       c = (c - 0.5) * contrast + 0.5 + lift;
       float l = dot(c, vec3(0.299, 0.587, 0.114));
       c = mix(vec3(l), c, saturation);
-      vec2 d = vUv - 0.5;
-      c *= 1.0 - vignette * smoothstep(0.25, 0.85, length(d * vec2(1.25, 1.0)));
+      c *= mix(cool, warm, smoothstep(0.15, 0.75, l));
+      c *= 1.0 - vignette * smoothstep(0.25, 0.85, r);
+      c += (hash(vUv * 1024.0) - 0.5) * grain;
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
     }`,
 };
 
-const _off = new Vector3(-30, 60, -20).normalize().multiplyScalar(70);
+const _off = SUN_DIR.clone().multiplyScalar(70);
 
 /**
  * Quality-dependent rendering: materials (Lambert ↔ Standard, reversible), sun shadows that follow
@@ -62,6 +88,9 @@ export class Graphics {
   quality: Quality = 'high';
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
+  private grade: ShaderPass | null = null;
+  private speedSmooth = 0;
+  private t = 0;
   private twins = new WeakMap<Material, MeshStandardMaterial>();
   private sun: DirectionalLight | null = null;
   private night = false;
@@ -131,18 +160,28 @@ export class Graphics {
     this.composer?.dispose();
     this.composer = null;
     this.bloom = null;
+    this.grade = null;
     const P = this.preset;
     if (!P.post) return;
     const rt = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: P.msaa });
     const c = new EffectComposer(this.renderer, rt);
     c.addPass(new RenderPass(this.scene, this.camera));
+    if (P.ao) {
+      const ao = new GTAOPass(this.scene, this.camera, this.size.x || 1, this.size.y || 1);
+      ao.output = GTAOPass.OUTPUT.Default;
+      ao.blendIntensity = 0.9;
+      ao.updateGtaoMaterial({ radius: 0.7, distanceExponent: 1.5, thickness: 1.2, scale: 1.1, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
+      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 5, rings: 2, samples: 12 });
+      c.addPass(ao);
+    }
     if (P.bloom) {
       this.bloom = new UnrealBloomPass(new Vector2(256, 256), 0.35, 0.5, 0.92);
       this.applyBloomLevel();
       c.addPass(this.bloom);
     }
     c.addPass(new OutputPass());
-    c.addPass(new ShaderPass(GradeShader));
+    this.grade = new ShaderPass(GradeShader);
+    c.addPass(this.grade);
     this.composer = c;
   }
 
@@ -161,7 +200,15 @@ export class Graphics {
     if (this.composer) { this.composer.setPixelRatio(pr); this.composer.setSize(w, h); }
   }
 
+  /** 0..1 from the rider's speed: drives the radial speed blur at the screen edges. */
+  setSpeed(kmh01: number) { this.speedSmooth += (Math.max(0, Math.min(1, kmh01)) - this.speedSmooth) * 0.08; }
+
   render() {
+    if (this.grade) {
+      this.t += 1 / 60;
+      this.grade.uniforms.speed.value = this.night ? this.speedSmooth * 0.6 : this.speedSmooth;
+      this.grade.uniforms.time.value = this.t % 100;
+    }
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }
