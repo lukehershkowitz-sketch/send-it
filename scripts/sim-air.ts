@@ -140,7 +140,7 @@ console.log('— rotation momentum, body-weight control at takeoff');
     },
   });
   void m;
-  check(r1 > 3 && r2 > 0.75 * r1 && a2 > a1 + 0.8, `rotation carries on after the keys are released: ${r1.toFixed(1)} rad/s at release → ${r2.toFixed(1)} rad/s 0.3 s later (+${((a2 - a1) / DEG).toFixed(0)}° with no input)`);
+  check(r1 > 2.4 && r2 > 0.75 * r1 && a2 > a1 + 0.8, `rotation carries on after the keys are released: ${r1.toFixed(1)} rad/s at release → ${r2.toFixed(1)} rad/s 0.3 s later (+${((a2 - a1) / DEG).toFixed(0)}° with no input)`);
 
   // weight shift while loaded: leaning back vs forward changes the rotation you leave the ramp with
   const lean = (dir: number) => ride(world, { speed: 12, maxT: 3, tail: 0, pilot: (r, t, i) => { popPilot(lipZ)(r, t, i); if (r.state === 'GROUNDED' && i.pop) { if (dir > 0) i.pedal = 1; else i.brake = 1; } } });

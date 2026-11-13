@@ -109,6 +109,7 @@ export class RiderController {
   chain: AirData['chain'] = [];
   lastSpinDir = 1;
   assistCalm = 0;           // 0..1: how much the stabiliser is following the flight path (off while you're tricking)
+  airCmd = { yaw: 0, pitch: 0, roll: 0, mix: 0 }; // smoothed rotation commands (keys ramp in and out instead of stepping)
   tableDir = 1;             // which side the tabletop rolls toward
   tablePressed = false;
   varBlend: Record<Variation, number> = { tuck: 0, superman: 0, cancan: 0 };

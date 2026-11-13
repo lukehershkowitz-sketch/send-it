@@ -28,6 +28,7 @@ export const Airborne = {
     r.lean = 0;
     r.assistCalm = 0;
     r.tableDir = 1;
+    r.airCmd.yaw = r.airCmd.pitch = r.airCmd.roll = r.airCmd.mix = 0;
   },
 
   update(r: RiderController, dt: number, input: InputState) {
@@ -69,8 +70,13 @@ export const Airborne = {
     const tl = r.predicted.valid ? r.predicted.time : 99;
     const driving = Math.abs(mix.yaw) > 0.1 || Math.abs(mix.pitch) > 0.1 || Math.abs(mix.roll) > 0.1;
     const prep = driving ? 0 : A.autoLevel * smooth((A.prepTime - tl) / (A.prepTime * 0.6));
+    // keys ramp the torque in and ease it out (no on/off step), so spins build and settle fluidly
+    const cmd = r.airCmd, R = TUNING.rot;
+    const ease = (cur: number, to: number) => cur + (to - cur) * (1 - Math.exp(-(Math.abs(to) >= Math.abs(cur) && Math.sign(to) === Math.sign(cur || to) ? R.cmdAttack : R.cmdRelease) * dt));
+    cmd.yaw = ease(cmd.yaw, mix.yaw); cmd.pitch = ease(cmd.pitch, mix.pitch); cmd.roll = ease(cmd.roll, mix.roll);
+    cmd.mix += (mix.yawAboutBody - cmd.mix) * (1 - Math.exp(-14 * dt));
     stepRotation(rs, {
-      yaw: mix.yaw, yawAboutBody: mix.yawAboutBody, pitch: mix.pitch, roll: mix.roll,
+      yaw: cmd.yaw, yawAboutBody: cmd.mix, pitch: cmd.pitch, roll: cmd.roll,
       brace: Math.max(braceIn, prep), tuck: r.varBlend.tuck, extraInertia: extra, assist,
     }, dt);
     r.quat.copy(rs.q);

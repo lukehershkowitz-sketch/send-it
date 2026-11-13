@@ -119,6 +119,8 @@ export const TUNING = {
     tuckInertia: 0.74,         // posture: tuck (no-hander key) → spins faster (angular momentum is conserved)
     braceInertia: 1.45,        // brace (hold Space in the air) → spreads out, slows rotation
     braceDamping: 2.4,         // 1/s extra damping while bracing
+    cmdAttack: 16,             // 1/s: how quickly a key press builds up to full torque (smooths keyboard on/off into a fluid ramp)
+    cmdRelease: 10,             // 1/s: how softly torque eases away when you let go
     inertiaRate: 10,           // how fast posture changes
     // off-axis mixes: ratio of each axis torque to the spin torque
     flairYaw: 0.45,            // ↑ alone: backflip with this much spin
