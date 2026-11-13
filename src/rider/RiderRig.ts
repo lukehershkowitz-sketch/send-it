@@ -125,7 +125,7 @@ export class RiderRig {
 
   private mats: Record<string, Material>;
 
-  constructor(colors: RigColors = { frame: 0x26292e, rider: 0x58626d, pants: 0x2b3038, helmet: 0x1b1d21 }) {
+  constructor(colors: RigColors = { frame: 0x26292e, rider: 0x58626d, pants: 0x2b3038, helmet: 0xcfd3d8 }) {
     const L = (c: number) => new MeshLambertMaterial({ color: c });
     this.mats = {
       frame: L(colors.frame), chrome: L(0xcfd6dc), tire: L(0x1d1d1f), rim: L(0x9aa3ab), dark: L(0x2a2d31),
@@ -432,10 +432,10 @@ export class RiderRig {
       const hipS = this._b.copy(hip).add(this._t.set(0.1 * s, 0, 0));
       const kneePole = this._t.set(0.15 * s, 0.1 + p.superman * 0.8, 1 - p.superman * 1.6);
       solveIK(hipS, foot, 0.47, 0.46, kneePole, this._k);
-      placeSeg(L[side === 0 ? 'thighL' : 'thighR'], hipS, this._k, 0.065);
+      placeSeg(L[side === 0 ? 'thighL' : 'thighR'], hipS, this._k, 0.078);
       this.joints[side === 0 ? 'kneeL' : 'kneeR'].position.copy(this._k);
       this.joints[side === 0 ? 'kneeL' : 'kneeR'].scale.setScalar(0.06 * this.jointScale);
-      placeSeg(L[side === 0 ? 'shinL' : 'shinR'], this._k, foot, 0.048);
+      placeSeg(L[side === 0 ? 'shinL' : 'shinR'], this._k, foot, 0.056);
       // ---- arms: grips → (barspin) let go → (tuck no-hander) thrown up and out
       const grip = this._a.set(0.34 * s, 1.05, 0.27)
         .applyMatrix4(this.frontInner.matrix).applyMatrix4(this.frontPivot.matrix);
@@ -444,7 +444,7 @@ export class RiderRig {
       this.hands[side].position.copy(grip);
       const shS = this._b.copy(sh).add(this._t.set(0.17 * s, -0.03, 0));
       solveIK(shS, grip, 0.3, 0.3, this._t.set(0.55 * s, -0.6, -0.55), this._k);
-      placeSeg(L[side === 0 ? 'upperL' : 'upperR'], shS, this._k, 0.045);
+      placeSeg(L[side === 0 ? 'upperL' : 'upperR'], shS, this._k, 0.05);
       this.joints[side === 0 ? 'elbowL' : 'elbowR'].position.copy(this._k);
       this.joints[side === 0 ? 'elbowL' : 'elbowR'].scale.setScalar(0.043 * this.jointScale);
       this.joints[side === 0 ? 'shL' : 'shR'].position.copy(shS);
@@ -456,7 +456,7 @@ export class RiderRig {
     const tl = td.length();
     this.torso.position.copy(hip).addScaledVector(td, 0.5);
     this.torso.quaternion.setFromUnitVectors(UPV, td.divideScalar(tl));
-    this.torso.scale.set(0.36, tl + 0.12, this.jointScale < 1 ? 0.24 : 0.2);
+    this.torso.scale.set(0.4, tl + 0.12, this.jointScale < 1 ? 0.24 : 0.2);
     this.pelvis.position.copy(hip);
     this.pelvis.quaternion.copy(this.torso.quaternion);
     this.pelvis.scale.set(0.3, 0.16, 0.2);

@@ -301,8 +301,7 @@ loft('upper', 'shirt', [(-.5, 1.05, 1.0), (-.2, 1.0, .98), (.2, .9, .88), (.5, .
 loft('fore', 'shirt', [(-.5, .95, .92), (-.15, .92, .9), (.25, .78, .76), (.4, .74, .72)], 16, .04, .02)
 loft('fore', 'glove', [(.38, .84, .82), (.5, .8, .78)], 16, .02, .04)
 # torso: unit box space (game scales x .36, y length, z .2): waist → chest → shoulders
-loft('torso', 'shirt', [(-.5, .4, .4), (-.3, .41, .41), (-.05, .43, .44), (.18, .48, .47), (.36, .5, .46), (.47, .44, .4)], 22, .07, .04)
-loft('torso', 'accent', [(.05, .462, .475), (.1, .474, .482), (.17, .492, .487)], 22, 0, 0)  # chest stripe, just proud of the jersey
+loft('torso', 'shirt', [(-.5, .38, .42), (-.32, .38, .4), (-.1, .42, .43), (.14, .5, .48), (.32, .55, .46), (.42, .5, .38), (.49, .3, .26)], 24, .05, .04)
 box('pelvis', 'pants', (0, 0, 0), (1, 1, 1), subsurf=2)
 # shoe: unit box space (game scales .1 x .07 x .24), toe toward +Z
 box('shoe', 'shoe', (0, .08, -.02), (.95, .8, .9), subsurf=2)
@@ -312,7 +311,7 @@ box('shoe', 'accent', (0, .02, .1), (1.0, .12, .5), subsurf=1)
 sphere('glove', 'glove', (0, 0, .005), .046, (0.85, 0.75, 1.15))
 sphere('glove', 'glove', (.03, -.005, -.01), .018, (1, 1, 1.4))
 # helmet: metres, head local (+Z = face)
-sphere('helmet', 'helmet', (0, .01, -.005), .152, (1.0, 1.02, 1.1), 24, 16)
+loft('helmet', 'helmet', [(-.07, .092, .1), (-.035, .122, .138), (.02, .143, .162), (.09, .136, .152), (.14, .098, .108)], 26, .02, .0)
 bm = bmesh.new()  # chin bar: half torus around the jaw
 segs, rings, R, r = 18, 8, .115, .03
 for i in range(segs + 1):
@@ -328,7 +327,7 @@ for i in range(segs):
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 finish(new_obj('chin', bm), 'helmet', 'helmet')
 sphere('helmet', 'visor', (0, -.03, .095), .07, (1.15, .7, .55))  # dark face opening
-box('helmet', 'helmet', (0, .085, .155), (.2, .018, .12), subsurf=1)  # peak
+box('helmet', 'helmet', (0, .095, .17), (.21, .014, .15), subsurf=1)  # peak
 box('helmet', 'goggle', (0, .015, .14), (.2, .055, .04), subsurf=1)
 loft('helmet', 'visor', [(-.012, .158, .17), (.012, .158, .17)], 28, 0, 0)  # goggle strap
 box('helmet', 'accent', (0, .14, -.01), (.04, .03, .26), subsurf=1)  # stripe

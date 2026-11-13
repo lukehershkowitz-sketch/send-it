@@ -110,7 +110,7 @@ const manualBal = (nose: boolean): Script => (r, _t, i) => {
   if (nose) { if (c > 0) i.pedal = Math.min(1, c); else i.brake = Math.min(1, -c); }
   else { if (c > 0) i.brake = Math.min(1, c); else i.pedal = Math.min(1, -c); }
 };
-run('manual 2s', all((r, t, i) => { if (t < 2) i.pedal = 1; i.manual = t > 2.1 && t < 4.1; }, manualBal(false)), { maxT: 8 });
+run('manual 2s', all((r, t, i) => { if (t < 2) i.pedal = 1; i.manual = t > 2.1 && t < 4.1; }, manualBal(false)), { maxT: 4.3 });
 run('nose manual 1.5s', all((r, t, i) => { if (t < 2) i.pedal = 1; i.manual = t > 2.1 && t < 3.6; i.brake = t > 2.1 && t < 2.2 ? 1 : 0; }, manualBal(true)), { maxT: 8 });
 run('manual unbalanced', (r, t, i) => { if (t < 2) i.pedal = 1; i.manual = t > 2.1; }, { maxT: 8 });
 run('jump into manual', all(jump(spinTo(360)), (r, _t, i) => { i.manual = r.state === 'AIRBORNE' ? r.airTime > 1.0 : r.state === 'MANUALING' ? r.manualTime < 1.2 : false; }, manualBal(false)));

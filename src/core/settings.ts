@@ -21,14 +21,14 @@ export const PALETTES: Record<keyof RiderColors, string[]> = {
   frame: ['#26292e', '#ff5a1f', '#e8e8e8', '#1d1d1f', '#2f7bff', '#14c38e', '#ffd23f', '#d6245a', '#8f5bff'],
   jersey: ['#58626d', '#1fb5a6', '#ff5a1f', '#f4f4f4', '#24262b', '#2f7bff', '#ffd23f', '#d6245a', '#6fbf3a'],
   pants: ['#2b2f3a', '#4a5568', '#1d1d1f', '#7c5a36', '#3a5a40', '#e8e8e8', '#2f4a7b', '#8a2f2f'],
-  helmet: ['#1b1d21', '#f4f4f4', '#1d1d1f', '#ff5a1f', '#2f7bff', '#ffd23f', '#14c38e', '#d6245a', '#c0c6cc'],
+  helmet: ['#cfd3d8', '#1b1d21', '#f4f4f4', '#1d1d1f', '#ff5a1f', '#2f7bff', '#ffd23f', '#14c38e', '#d6245a', '#c0c6cc'],
 };
 
 const KEY = 'sendit.settings.v1';
 export const DEFAULT_SETTINGS: Settings = {
   volume: 0.8, muted: false, landingAssist: TUNING.air.autoLevel, renderScale: 1, showDebug: false,
   park: 'dirtline', lighting: 'day',
-  colors: { frame: '#26292e', jersey: '#58626d', pants: '#2b3038', helmet: '#1b1d21' },
+  colors: { frame: '#26292e', jersey: '#58626d', pants: '#2b3038', helmet: '#cfd3d8' },
   playerName: '', mpCode: '', mpServer: '', graphics: 'auto',
 };
 

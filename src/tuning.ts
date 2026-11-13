@@ -22,11 +22,11 @@ export const TUNING = {
   },
 
   ride: {
-    pedalAccel: 6.5,           // m/s² at low speed (tapers toward max)
-    maxPedalSpeed: 12,         // can't pedal faster than this (gravity/pumping can exceed it)
-    maxSpeed: 24,              // hard cap
+    pedalAccel: 9,           // m/s² at low speed (tapers toward max)
+    maxPedalSpeed: 14.5,         // can't pedal faster than this (gravity/pumping can exceed it)
+    maxSpeed: 28,              // hard cap
     brakeDecel: 11,
-    rollingResistance: 0.12,   // m/s² constant drag
+    rollingResistance: 0.08,   // m/s² constant drag
     airDrag: 0.0035,           // × speed²
     turnRateSlow: 150,         // °/s steering at standstill
     turnRateFast: 70,          // °/s steering at max pedal speed
@@ -35,7 +35,7 @@ export const TUNING = {
     gripFast: 7,               //   …at speed (lower = more drift/carve feel)
     carveScrub: 0.9,           // speed lost while the bike is sliding sideways
     pumpGain: 1.5,             // m/s gained per radian of transition when holding pedal (pumping)
-    pumpMaxSpeed: 14,          // pumping stops adding speed above this
+    pumpMaxSpeed: 16,          // pumping stops adding speed above this
     maxLeanDeg: 24,            // visual lean into carves
     fakieTurnSpeed: 3.5,       // below this speed, pedalling while fakie pivots you back to forward
   },
