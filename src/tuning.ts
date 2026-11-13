@@ -167,12 +167,12 @@ export const TUNING = {
     minAirTime: 0.04,
     contactMinAir: 0.07,       // s before wheel/body contact tests start (the bike is still clearing the lip)
     rollTolerance: 42,         // ° sideways lean allowed at touchdown
-    wobbleStiffness: 120,      // landing wobble spring (rotation of the bike relative to the ground)
-    wobbleDamping: 11,
+    wobbleStiffness: 75,      // landing wobble spring (rotation of the bike relative to the ground)
+    wobbleDamping: 13,
     wobbleCarry: 0.3,          // fraction of the air angular velocity carried into the wobble
     wobbleMax: 30,             // ° cap on the initial wobble
-    severitySpeedLoss: 0.2,    // speed lost at the edge of tolerance (scaled by how crooked it was)
-    frontWheelLoss: 0.05,      // extra speed lost landing on the front wheel first
+    severitySpeedLoss: 0.13,    // speed lost at the edge of tolerance (scaled by how crooked it was)
+    frontWheelLoss: 0.03,      // extra speed lost landing on the front wheel first
     headRadius: 0.2,           // rider's head/bars test points for crashes (see Airborne)
   },
 

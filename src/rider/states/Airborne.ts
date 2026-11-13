@@ -368,7 +368,7 @@ function land(r: RiderController, n: Vector3, input: InputState, contact: Vector
 
   // the rider takes the hit: legs compress, torso jolts toward the wheel that landed first
   const jolt = check.wheelFirst === 'front' ? 0.9 : check.wheelFirst === 'rear' ? -0.9 : 0;
-  r.body.kick(Math.min(7, 1.5 + check.impact * 0.55), jolt * (0.4 + sev), 0);
+  r.body.kick(Math.min(5.5, 1.2 + check.impact * 0.4), jolt * (0.3 + 0.5 * Math.min(sev, 1.5)), 0);
 
   r.setState('GROUNDED');
   Grounded.orient(r, 0);

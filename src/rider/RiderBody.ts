@@ -32,7 +32,7 @@ export class RiderBody {
 
   update(dt: number, t: BodyTargets) {
     // semi-implicit spring-dampers; slightly underdamped so the body overshoots and settles
-    this.crouchV += (130 * (t.crouch - this.crouch) - 15 * this.crouchV) * dt;
+    this.crouchV += (110 * (t.crouch - this.crouch) - 16 * this.crouchV) * dt;
     this.crouch = Math.max(-0.35, Math.min(1.05, this.crouch + this.crouchV * dt));
     this.shiftXV += (85 * (t.shiftX - this.shiftX) - 10 * this.shiftXV) * dt;
     this.shiftX = Math.max(-0.22, Math.min(0.22, this.shiftX + this.shiftXV * dt));

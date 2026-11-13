@@ -233,10 +233,19 @@ export class RiderController {
       const curl = 0.5 * clamp(Math.abs(w.x) / 6, 0, 1) + 0.22 * clamp(Math.abs(w.y) / 9, 0, 1) + 0.12 * clamp(Math.abs(w.z) / 7, 0, 1);
       const tl = this.predicted.valid ? this.predicted.time : 99;
       const prep = clamp((0.42 - tl) / 0.28, 0, 1) * (1 - 0.7 * clamp(this.rot.omega.length() / 5, 0, 1));
-      crouch = (0.3 + curl) * (1 - prep) + -0.18 * prep - this.extendPose * 0.55;
+      // jump phases from the flight itself: stretched out leaving the lip, knees drawn up and weight centred at the
+      // apex (the bike floats), then arms and legs reaching for the ground on the way down
+      const vy = this.vel.y;
+      const rise = clamp(vy / 7, 0, 1), fall = clamp(-vy / 9, 0, 1);
+      const apex = 1 - clamp(Math.abs(vy) / 4.5, 0, 1);
+      const sinceTakeoff = clamp(this.airTime / 0.35, 0, 1);
+      const phase = -0.22 * rise * (1 - sinceTakeoff * 0.5) + 0.2 * apex - 0.2 * fall * (1 - prep);
+      crouch = (0.3 + curl + phase) * (1 - prep) + -0.18 * prep - this.extendPose * 0.55;
       const roll = bikeRoll(this.rot);
-      sz = clamp(-w.x * 0.0125, -0.14, 0.14);
-      sx = clamp(-w.y * 0.01 + 0.12 * Math.sin(roll), -0.14, 0.14);
+      // torso leans back going up, forward onto the bars coming down; a slow drift keeps long airs alive
+      const sway = Math.sin(this.airTime * 2.3) * 0.015 * apex;
+      sz = clamp(-w.x * 0.0125 - 0.06 * rise + 0.05 * fall + sway, -0.16, 0.16);
+      sx = clamp(-w.y * 0.01 + 0.12 * Math.sin(roll) + Math.cos(this.airTime * 1.7) * 0.012 * apex, -0.14, 0.14);
       table = clamp((Math.abs(roll) - 35 * DEG) / (37 * DEG), 0, 1);
     } else if (st === 'GRINDING') {
       crouch = 0.35;
