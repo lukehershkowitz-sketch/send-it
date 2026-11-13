@@ -105,7 +105,7 @@ export function decorate(scene: Scene, world: World, renderer: WebGLRenderer, li
   const hint = <T extends Material>(m: T, roughness: number, metalness = 0): T => { m.userData.pbr = { roughness, metalness }; return m; };
   const swap: Map<Material, Material> = new Map([
     [pieceMaterials.ground, keep(hint(new MeshLambertMaterial({ map: groundTex }), 1))],
-    [pieceMaterials.dirtTop, keep(hint(new MeshLambertMaterial({ map: keep(textures.dirtTop(aniso)), flatShading: true }), 1))],
+    [pieceMaterials.dirtTop, keep(hint(new MeshLambertMaterial({ map: keep(textures.dirtTop(aniso)), color: 0xc9b4a0, flatShading: true }), 1))],
     [pieceMaterials.dirtSide, keep(hint(new MeshLambertMaterial({ map: keep(textures.dirtSide(aniso)), flatShading: true, side: 2 }), 1))],
     [pieceMaterials.concrete, keep(hint(new MeshLambertMaterial({ map: concreteTex }), 0.88))],
     [pieceMaterials.concreteSide, keep(hint(new MeshLambertMaterial({ map: concreteTex, color: 0xd8d4cc, side: 2 }), 0.9))],

@@ -136,7 +136,7 @@ export class Menu {
     let html = '';
     switch (this.screen) {
       case 'main':
-        html = `<div class="title">SEND IT<small>arcade BMX</small></div>
+        html = `<div class="title">SEND IT<small>BMX</small></div>
           ${btn('parks', 'Ride')}${btn('multiplayer', 'Multiplayer')}${btn('rider', 'Rider & bike')}${btn('settings', 'Settings')}${btn('controls', 'Controls')}`;
         break;
       case 'parks':

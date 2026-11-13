@@ -21,6 +21,14 @@ function make(size: number, draw: (g: CanvasRenderingContext2D, r: () => number)
   return t;
 }
 
+/** Swap a photographic image into a texture once it loads (the procedural version shows meanwhile / if it fails). */
+function photo(tex: Texture, file: string, aniso: number): Texture {
+  const img = new Image();
+  img.onload = () => { tex.image = img; tex.anisotropy = aniso; tex.needsUpdate = true; };
+  img.src = `${import.meta.env.BASE_URL}tex/${file}`;
+  return tex;
+}
+
 function speckle(g: CanvasRenderingContext2D, r: () => number, n: number, size: number, color: () => string, max = 3) {
   for (let i = 0; i < n; i++) {
     g.fillStyle = color();
@@ -30,21 +38,21 @@ function speckle(g: CanvasRenderingContext2D, r: () => number, n: number, size: 
 }
 
 export const textures = {
-  grass: (aniso: number) => make(256, (g, r) => {
+  grass: (aniso: number) => photo(make(256, (g, r) => {
     g.fillStyle = '#8ea46a'; g.fillRect(0, 0, 256, 256);
     speckle(g, r, 2600, 256, () => `hsl(${78 + r() * 30}, ${25 + r() * 20}%, ${30 + r() * 22}%)`);
     g.strokeStyle = 'rgba(40,50,25,0.18)'; g.lineWidth = 2; g.strokeRect(1, 1, 254, 254);
-  }, 3, aniso),
+  }, 3, aniso), 'grass.jpg', aniso),
 
-  forestFloor: (aniso: number) => make(256, (g, r) => {
+  forestFloor: (aniso: number) => photo(make(256, (g, r) => {
     g.fillStyle = '#5d6b3c'; g.fillRect(0, 0, 256, 256);
     speckle(g, r, 2200, 256, () => `hsl(${60 + r() * 40}, ${20 + r() * 20}%, ${22 + r() * 18}%)`);
     speckle(g, r, 900, 256, () => `hsl(${28 + r() * 12}, ${35 + r() * 15}%, ${22 + r() * 12}%)`, 4); // needles / leaves
     g.strokeStyle = 'rgba(30,35,15,0.16)'; g.lineWidth = 2; g.strokeRect(1, 1, 254, 254);
-  }, 5, aniso),
+  }, 5, aniso), 'grass.jpg', aniso),
 
-  /** Packed dirt for jump tops: u = across, v = along. Darker tyre ruts down the middle. */
-  dirtTop: (aniso: number) => make(256, (g, r) => {
+  /** Packed dirt for jump tops: u = across, v = along. Photographic, with the procedural ruts as a fallback. */
+  dirtTop: (aniso: number) => photo(make(256, (g, r) => {
     g.fillStyle = '#b78350'; g.fillRect(0, 0, 256, 256);
     speckle(g, r, 2600, 256, () => `hsl(${26 + r() * 10}, ${38 + r() * 18}%, ${38 + r() * 18}%)`, 2);
     for (const x of [0, 38]) {
@@ -53,7 +61,7 @@ export const textures = {
       g.fillStyle = grd; g.fillRect(x, 0, 26, 256);
     }
     speckle(g, r, 140, 256, () => `rgba(255,240,210,${0.15 + r() * 0.2})`, 2); // pebbles
-  }, 7, aniso),
+  }, 7, aniso), 'dirt.jpg', aniso),
 
   dirtSide: (aniso: number) => make(256, (g, r) => {
     g.fillStyle = '#9a6a42'; g.fillRect(0, 0, 256, 256);
