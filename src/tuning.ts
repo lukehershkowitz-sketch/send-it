@@ -68,7 +68,7 @@ export const TUNING = {
   },
 
   air: {
-    autoLevel: 0.85,           // 0 = no help, 1 = full: the light landing assist described below
+    autoLevel: 1.0,           // 0 = no help, 1 = full: the light landing assist described below
     latchPedalAtTakeoff: true, // W held through the lip doesn't start a frontflip until re-pressed
     airDrag: 0.0008,           // × speed²: speed is kept in the air
     vertNormalY: 0.25,         // leaving a surface steeper than ~75° going up = vert air (spins turn you in the wall's plane); spines (~70°) let you transfer
@@ -93,13 +93,13 @@ export const TUNING = {
     followMaxRoll: 110,        // ° of accumulated roll beyond which following switches off…
     followMaxRollRate: 4.5,    // …or while rolling faster than this (rad/s): a barrel roll in progress         // ° of accumulated flip/roll beyond which following switches off (you're doing a trick)
     blendTime: 0.9,            // s before touchdown the target nose angle starts easing from the flight path onto the landing slope
-    alignTime: 0.55,           // in the last this-many seconds the landing nudge fades in
-    alignGain: 90,             // rad/s² per rad toward the predicted landing surface
+    alignTime: 0.7,           // in the last this-many seconds the landing nudge fades in
+    alignGain: 120,             // rad/s² per rad toward the predicted landing surface
     alignDamp: 14,
-    alignWindow: 48,           // ° — only nudges when within this of a clean landing (never drags a half-done flip back)
+    alignWindow: 80,           // ° — only nudges when within this of a clean landing (never drags a half-done flip back)
     alignMax: 38,              // rad/s² cap on the nudge
-    yawNudge: 26,              // rad/s² per rad: eases a near-clean spin onto the travel direction (or fakie)
-    yawWindow: 75,
+    yawNudge: 36,              // rad/s² per rad: eases a near-clean spin onto the travel direction (or fakie)
+    yawWindow: 110,
     yawDamp: 3.5,              // rad/s² per rad/s: settles a near-clean spin while the landing nudge is on
     prepTime: 0.3,             // s before touchdown the rider starts reaching for the ground (spreading out slows rotation)
     groundSampleRate: 10,      // smoothing of the predicted landing-surface normal
@@ -143,29 +143,32 @@ export const TUNING = {
   },
 
   landing: {
-    yawTolerance: 25,          // ° between wheels and travel direction (fakie = 180 ± this)
-    pitchTolerance: 20,        // ° between wheels and the landing surface
+    yawTolerance: 48,          // ° between wheels and travel direction (fakie = 180 ± this)
+    pitchTolerance: 34,        // ° between wheels and the landing surface
     stompYaw: 8,               // inside these = STOMPED
     stompPitch: 8,
-    requireInputsReleased: true,
+    requireInputsReleased: false, // holding keys into the landing just makes it sketchy, never a bail
+    bailSeverity: 2.6,         // only landings this many × past tolerance (or upside down / on your head) crash
+    sketchyAt: 1.0,            // past tolerance = a sketchy save: speed scrub + wobble, no bail
+    saveYawRate: 9,            // how fast a crooked landing straightens out (1/s)
     whipTolerance: 25,         // frame must be within this many ° of straight
     barTolerance: 30,          // bars must be within this many ° of centre
     variationMaxBlend: 0.35,   // rider must be at least this far back from a grab pose
     smallAirTime: 0.3,         // airs shorter than this get extra tolerance (rolling off small drops)
     smallAirToleranceScale: 1.8,
     steepToleranceScale: 1.3,  // landing on a wall steeper than ~40°
-    maxImpactSpeed: 17,        // m/s into the surface; harder than this = bail even if aligned
+    maxImpactSpeed: 24,        // m/s into the surface; harder than this = bail even if aligned
     casedSlope: 0.45,          // landing on a face this steep pointing back at you (sin of slope)…
     casedImpact: 5,            // …with at least this much impact = cased it
     cleanSpeedKeep: 0.93,      // speed kept on a clean landing
     stompSpeedKeep: 1.0,       // speed kept on a stomp
     minAirTime: 0.04,
     contactMinAir: 0.07,       // s before wheel/body contact tests start (the bike is still clearing the lip)
-    rollTolerance: 24,         // ° sideways lean allowed at touchdown
+    rollTolerance: 42,         // ° sideways lean allowed at touchdown
     wobbleStiffness: 120,      // landing wobble spring (rotation of the bike relative to the ground)
-    wobbleDamping: 9,
+    wobbleDamping: 11,
     wobbleCarry: 0.3,          // fraction of the air angular velocity carried into the wobble
-    wobbleMax: 38,             // ° cap on the initial wobble
+    wobbleMax: 30,             // ° cap on the initial wobble
     severitySpeedLoss: 0.2,    // speed lost at the edge of tolerance (scaled by how crooked it was)
     frontWheelLoss: 0.05,      // extra speed lost landing on the front wheel first
     headRadius: 0.2,           // rider's head/bars test points for crashes (see Airborne)
@@ -253,7 +256,7 @@ export const TUNING = {
 
   camera: {
     baseFov: 62,
-    speedFovBoost: 6,
+    speedFovBoost: 12,
     airFovBoost: 7,
     distMin: 4.8,
     distMax: 6.6,
@@ -261,7 +264,7 @@ export const TUNING = {
     heightMax: 3.0,
     airPullBack: 1.2,
     airRaise: 1.0,
-    yawLagRate: 3.5,           // lower = lazier swing on turns
+    yawLagRate: 4.5,           // lower = lazier swing on turns
     posLagRate: 9,
     verticalLagRate: 7,
     lookAhead: 4.0,
@@ -270,11 +273,11 @@ export const TUNING = {
     bigAirPull: 2.2,           // extra distance behind the rider at that height
     bigAirRaise: 0.9,
     bigAirFov: 5,              // extra field of view at that height
-    landKick: 0.075,           // m of vertical camera dip per m/s of landing impact
-    landKickMax: 0.55,
+    landKick: 0.05,           // m of vertical camera dip per m/s of landing impact
+    landKickMax: 0.4,
     landKickFov: 0.55,         // ° of FOV punch per m/s of impact
     landStiffness: 150,
-    landDamping: 11,
+    landDamping: 14,
     airLookAhead: 0.5,         // extra look-ahead (× horizontal speed fraction) so the landing stays in frame
     freeLookSensitivity: 0.005, // mouse
     freeLookStickSpeed: 3,      // rad/s on right stick

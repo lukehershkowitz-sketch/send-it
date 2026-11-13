@@ -322,8 +322,8 @@ function land(r: RiderController, n: Vector3, input: InputState, contact: Vector
 
   // ride away with the speed the landing deserves: crooked and front-wheel landings scrub speed
   _vt.copy(r.vel).addScaledVector(n, -r.vel.dot(n));
-  const sev = clamp(check.severity, 0, 1.2);
-  let loss = check.stomped ? 0.005 : L.severitySpeedLoss * Math.pow(sev, 1.4);
+  const sev = clamp(check.severity, 0, 2.6);
+  let loss = check.stomped ? 0.005 : L.severitySpeedLoss * Math.pow(Math.min(sev, 1.5), 1.2) * (sev > 1 ? 0.7 + 0.3 * sev : 1);
   if (check.wheelFirst === 'front') loss += L.frontWheelLoss * (0.4 + sev);
   loss += Math.max(0, check.impact - 9) * 0.008;
   r.speed = _vt.length() * (1 - clamp(loss, 0, 0.45));
@@ -331,7 +331,14 @@ function land(r: RiderController, n: Vector3, input: InputState, contact: Vector
   r.travelYaw = r.heading = travelYaw;
   r.fakie = check.fakie;
   r.fakieVis = r.fakie ? Math.PI : 0;
-  r.yawVisOffset = 0;
+  // a crooked landing straightens out smoothly instead of snapping to the travel direction
+  _hit.set(0, 0, 1).applyQuaternion(r.rot.q);
+  _hit.addScaledVector(n, -_hit.dot(n));
+  if (_hit.lengthSq() > 1e-4) {
+    let off = wrapAngle(yawFromTangent(_hit.normalize(), n) - travelYaw);
+    if (Math.abs(off) > Math.PI / 2) off = wrapAngle(off - Math.sign(off) * Math.PI);
+    r.yawVisOffset = clamp(off, -1.6, 1.6);
+  } else r.yawVisOffset = 0;
   r.normal.copy(n);
   r.steer = 0;
   r.compression = 0;

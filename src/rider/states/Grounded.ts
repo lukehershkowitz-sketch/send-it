@@ -195,7 +195,7 @@ export function rideStep(r: RiderController, dt: number, input: InputState, mode
 
     // ---------------------------------------------------------------- visuals
     r.fakieVis = damp(r.fakieVis, r.fakie ? Math.PI : 0, 10, dt);
-    r.yawVisOffset = damp(r.yawVisOffset, 0, 8, dt);
+    r.yawVisOffset = damp(r.yawVisOffset, 0, TUNING.landing.saveYawRate, dt);
     r.lean = damp(r.lean, r.steer * sf * R.maxLeanDeg * DEG, 8, dt);
     r.wheelAngle += (r.speed / 0.255) * dt * (r.fakie ? -1 : 1);
     Grounded.orient(r, r.lean);

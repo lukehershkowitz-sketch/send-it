@@ -31,6 +31,7 @@ export interface LandingCheck {
   yawTol: number;
   pitchTol: number;
   ok: boolean;
+  sketchy?: boolean;   // landed outside tolerance but saved it
   stomped: boolean;
   reason: string;      // bail reason if !ok
 }

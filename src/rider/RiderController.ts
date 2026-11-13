@@ -488,20 +488,18 @@ export class RiderController {
     const horiz = Math.hypot(this.vel.x, this.vel.z) || 1;
     const facesUs = (n.x * this.vel.x + n.z * this.vel.z) / horiz < -L.casedSlope;
     let reason = '';
+    const severity0 = Math.max(pitchErr / pitchTol, rollErr / rollTol, yawErr / yawTol);
     if (facesUs && (inverted || pitchErr > pitchTol || impact > L.casedImpact)) reason = 'Cased it — needs more speed or pop';
     else if (inverted) reason = 'Landed upside down';
-    else if (holding) reason = 'Still holding the trick';
-    else if (whipErr > L.whipTolerance) reason = 'Frame not caught — tailwhip unfinished';
-    else if (barErr > L.barTolerance) reason = 'Bars not caught — barspin unfinished';
-    else if (variation > L.variationMaxBlend) reason = 'Still in the grab — let go sooner';
-    else if (pitchErr > pitchTol) reason = this.noseOrTail(n);
-    else if (rollErr > rollTol) reason = 'Landed on the side — roll not recovered';
-    else if (yawErr > yawTol) reason = 'Landed sideways';
+    else if (severity0 > L.bailSeverity) reason = pitchErr / pitchTol >= Math.max(rollErr / rollTol, yawErr / yawTol) ? this.noseOrTail(n) : rollErr / rollTol > yawErr / yawTol ? 'Landed on the side' : 'Landed sideways';
     else if (impact > L.maxImpactSpeed) reason = 'Too hard — flat landing';
     const ok = reason === '';
-    const stomped = ok && yawErr <= L.stompYaw && pitchErr <= L.stompPitch && rollErr <= L.stompPitch;
-    const severity = Math.max(pitchErr / pitchTol, rollErr / rollTol, yawErr / yawTol);
-    return { yawErr, pitchErr, rollErr, rollTol, severity, wheelFirst, whipErr, barErr, variation, fakie, inverted, holding, impact, yawTol, pitchTol, ok, stomped, reason };
+    const stomped = ok && !holding && yawErr <= L.stompYaw && pitchErr <= L.stompPitch && rollErr <= L.stompPitch && whipErr <= L.whipTolerance && barErr <= L.barTolerance && variation <= L.variationMaxBlend;
+    // unfinished whips/bars, grabs and held keys no longer bail: they just make it a sketchy save
+    const messy = holding || whipErr > L.whipTolerance || barErr > L.barTolerance || variation > L.variationMaxBlend;
+    const severity = Math.max(severity0, messy ? L.sketchyAt * 0.8 : 0);
+    const sketchy = ok && severity >= L.sketchyAt;
+    return { sketchy, yawErr, pitchErr, rollErr, rollTol, severity, wheelFirst, whipErr, barErr, variation, fakie, inverted, holding, impact, yawTol, pitchTol, ok, stomped, reason };
   }
 
   private noseOrTail(n: Vector3): string {
